@@ -1,6 +1,3 @@
-# 1. 必要なライブラリのインストール（Colab用）
-!pip install streamlit plotly
-
 # 2. アプリ本体の作成
 import streamlit as st
 import pandas as pd
