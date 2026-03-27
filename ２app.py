@@ -24,11 +24,11 @@ with st.form("check_form"):
             st.error("ME No.を入力してください")
         else:
             try:
-                # スプレッドシート接続
+                # スプレッドシート接続（Secretsの設定を使います）
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 
                 # 新しいデータ作成
-                new_data = pd.DataFrame([{
+                new_row = pd.DataFrame([{
                     "点検日": str(check_date),
                     "ME No.": me_no,
                     "機種": model_type,
@@ -37,14 +37,10 @@ with st.form("check_form"):
                     "備考": memo
                 }])
                 
-                # 既存のデータを取得して追記
-                existing_data = conn.read(worksheet="シート1", usecols=[0,1,2,3,4,5], ttl=0)
-                updated_df = pd.concat([existing_data, new_data], ignore_index=True)
-                
-                # 保存実行
-                conn.update(worksheet="シート1", data=updated_df)
+                # 【重要】スプレッドシートに直接「追記」する命令
+                conn.create(data=new_row)
                 
                 st.balloons()
-                st.success("スプレッドシートに書き込みました！")
+                st.success("スプレッドシートに保存しました！")
             except Exception as e:
-                st.error(f"エラーが発生しました: {e}")
+                st.error(f"接続エラーが発生しました。Secretsの設定を確認してください。: {e}")
