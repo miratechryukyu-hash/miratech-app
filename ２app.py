@@ -70,7 +70,6 @@ with tab1:
 
         # ＝＝＝ シリンジポンプが選ばれた時の画面 ＝＝＝
         elif device_category == "シリンジポンプ":
-            # 【大進化】シリンジポンプ専用のプロ仕様チェックリスト！
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック（タップで開く）", expanded=True):
                 st.write("**【外観・作動点検】**")
                 col1, col2 = st.columns(2)
@@ -102,7 +101,6 @@ with tab1:
                 
             battery_s = st.number_input("内蔵バッテリ (内部数値など)", value=0.0, step=0.1)
             
-            # 自動判定ロジック
             ext_all_ok_s = all([chk_es1, chk_es2, chk_es3, chk_es4, chk_es5, chk_es6])
             alm_all_ok_s = all([chk_as1, chk_as2, chk_as3, chk_as4, chk_as5])
             
@@ -112,4 +110,75 @@ with tab1:
         # ＝＝＝ 人工呼吸器・その他が選ばれた時の画面 ＝＝＝
         else:
             exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
-            detail_result = st.text
+            detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
+
+        st.markdown("---")
+        inspector = st.text_input("実施者", value="安富")
+        result = st.radio("総合評価", ["使用可", "メーカー修理", "廃棄"], horizontal=True) 
+        memo = st.text_area("備考・報告欄")
+        
+        submitted = st.form_submit_button("スプレッドシートに保存")
+
+    # ＝＝＝ 保存処理 ＝＝＝
+    if submitted:
+        if not me_no:
+            st.warning("⚠️ ME No.を入力してください")
+        else:
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                existing_data = conn.read(worksheet="シート1", ttl=0).dropna(how="all") 
+                
+                is_duplicate = False
+                if "ME No." in existing_data.columns and "点検日" in existing_data.columns:
+                    is_duplicate = ((existing_data["ME No."] == me_no) & (existing_data["点検日"].astype(str) == str(check_date))).any()
+                
+                if is_duplicate:
+                    st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！大丈夫ですか？")
+                else:
+                    combined_model = f"{device_category} ({device_model})"
+                    
+                    new_data = pd.DataFrame([{
+                        "点検日": str(check_date),
+                        "ME No.": me_no,
+                        "機種": combined_model,
+                        "外装点検": exterior_result,    
+                        "精度チェック": detail_result, 
+                        "実施者": inspector,
+                        "判定": result,
+                        "備考": memo
+                    }])
+                    
+                    updated_df = pd.concat([existing_data, new_data], ignore_index=True)
+                    conn.update(worksheet="シート1", data=updated_df)
+                    
+                    st.cache_data.clear()
+                    st.balloons()
+                    st.success(f"大成功！{me_no} の点検データを記録しました！")
+                    
+            except Exception as e:
+                st.error(f"エラー発生: {e}")
+
+# ====== タブ2：履歴確認画面 ======
+with tab2:
+    st.subheader("📊 スプレッドシートのデータを確認")
+    
+    if st.button("🔄 最新のデータを読み込む"):
+        st.cache_data.clear()
+        
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(worksheet="シート1", ttl=0).dropna(how="all")
+        
+        if df.empty:
+            st.info("まだ点検記録がありません。")
+        else:
+            search_query = st.text_input("🔍 探したい「ME No.」を入力してください")
+            if search_query:
+                # 💡 ここを修正しました！（if ではなく df = に変更）
+                df = df[df["ME No."].astype(str).fillna("").str.contains(search_query, case=False)]
+                st.write(f"「{search_query}」の検索結果: {len(df)} 件")
+            
+            st.dataframe(df.iloc[::-1], use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"データの読み込みに失敗しました: {e}")
