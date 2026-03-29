@@ -19,34 +19,44 @@ with st.form("check_form"):
     
     submitted = st.form_submit_button("スプレッドシートに保存")
 
-# ⚠️ここが最大のポイント！「if submitted:」を一番左端（空白ゼロ）にピタッとくっつけます
 if submitted:
-    try:
-        # スプレッドシートに接続
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # 常に最新を読み込み、空っぽの行を無視する
-        existing_data = conn.read(worksheet="シート1", ttl=0)
-        existing_data = existing_data.dropna(how="all") 
-        
-        # 新しいデータを作成
-        new_data = pd.DataFrame([{
-            "点検日": str(check_date),
-            "ME No.": me_no,
-            "機種": model_type,
-            "実施者": inspector,
-            "判定": result,
-            "備考": memo
-        }])
-        
-        # データを合体させて上書き保存
-        updated_df = pd.concat([existing_data, new_data], ignore_index=True)
-        conn.update(worksheet="シート1", data=updated_df)
-        
-        # アプリの記憶（キャッシュ）をリセットしてスッキリさせる
-        st.cache_data.clear()
-        
-        st.balloons()
-        st.success("大成功！スプレッドシートの2行目を確認してください！")
-    except Exception as e:
-        st.error(f"エラー発生: {e}")
+    # ME No.が空っぽの時のエラー
+    if not me_no:
+        st.warning("⚠️ ME No.を入力してください")
+    else:
+        try:
+            # スプレッドシートに接続して読み込み
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            existing_data = conn.read(worksheet="シート1", ttl=0)
+            existing_data = existing_data.dropna(how="all") 
+            
+            # 【新機能】重複チェック（同じ日・同じME No.がないか確認）
+            is_duplicate = False
+            if "ME No." in existing_data.columns and "点検日" in existing_data.columns:
+                # シートの日付と入力された日付、ME No.を比較
+                is_duplicate = ((existing_data["ME No."] == me_no) & (existing_data["点検日"].astype(str) == str(check_date))).any()
+            
+            # 重複していたらエラーを出して「保存させない」
+            if is_duplicate:
+                st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！大丈夫ですか？")
+            
+            # 重複していなければ、今まで通り保存！
+            else:
+                new_data = pd.DataFrame([{
+                    "点検日": str(check_date),
+                    "ME No.": me_no,
+                    "機種": model_type,
+                    "実施者": inspector,
+                    "判定": result,
+                    "備考": memo
+                }])
+                
+                updated_df = pd.concat([existing_data, new_data], ignore_index=True)
+                conn.update(worksheet="シート1", data=updated_df)
+                
+                st.cache_data.clear()
+                st.balloons()
+                st.success(f"大成功！{me_no} の点検データを記録しました！")
+                
+        except Exception as e:
+            st.error(f"エラー発生: {e}")
