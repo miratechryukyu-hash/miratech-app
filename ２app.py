@@ -19,33 +19,34 @@ with st.form("check_form"):
     
     submitted = st.form_submit_button("スプレッドシートに保存")
 
-  if submitted:
-        try:
-            # スプレッドシートに接続
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            
-            # ttl=0 をつけて「常に最新」を読み込み、dropna(how="all") で「空っぽの行」を無視する！
-            existing_data = conn.read(worksheet="シート1", ttl=0)
-            existing_data = existing_data.dropna(how="all") 
-            
-            # 新しいデータを作成
-            new_data = pd.DataFrame([{
-                "点検日": str(check_date),
-                "ME No.": me_no,
-                "機種": model_type,
-                "実施者": inspector,
-                "判定": result,
-                "備考": memo
-            }])
-            
-            # データを合体させて上書き保存
-            updated_df = pd.concat([existing_data, new_data], ignore_index=True)
-            conn.update(worksheet="シート1", data=updated_df)
-            
-            # アプリの記憶（キャッシュ）をリセットしてスッキリさせる
-            st.cache_data.clear()
-            
-            st.balloons()
-            st.success("大成功！スプレッドシートの2行目を確認してください！")
-        except Exception as e:
-            st.error(f"エラー発生: {e}")
+# ⚠️ここが最大のポイント！「if submitted:」を一番左端（空白ゼロ）にピタッとくっつけます
+if submitted:
+    try:
+        # スプレッドシートに接続
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        
+        # 常に最新を読み込み、空っぽの行を無視する
+        existing_data = conn.read(worksheet="シート1", ttl=0)
+        existing_data = existing_data.dropna(how="all") 
+        
+        # 新しいデータを作成
+        new_data = pd.DataFrame([{
+            "点検日": str(check_date),
+            "ME No.": me_no,
+            "機種": model_type,
+            "実施者": inspector,
+            "判定": result,
+            "備考": memo
+        }])
+        
+        # データを合体させて上書き保存
+        updated_df = pd.concat([existing_data, new_data], ignore_index=True)
+        conn.update(worksheet="シート1", data=updated_df)
+        
+        # アプリの記憶（キャッシュ）をリセットしてスッキリさせる
+        st.cache_data.clear()
+        
+        st.balloons()
+        st.success("大成功！スプレッドシートの2行目を確認してください！")
+    except Exception as e:
+        st.error(f"エラー発生: {e}")
