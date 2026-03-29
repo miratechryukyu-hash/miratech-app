@@ -19,28 +19,33 @@ with st.form("check_form"):
     
     submitted = st.form_submit_button("スプレッドシートに保存")
 
-    if submitted:
-        if not me_no:
-            st.error("ME No.を入力してください")
-        else:
-            try:
-                # スプレッドシート接続（Secretsの設定を使います）
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                
-                # 新しいデータ作成
-                new_row = pd.DataFrame([{
-                    "点検日": str(check_date),
-                    "ME No.": me_no,
-                    "機種": model_type,
-                    "実施者": inspector,
-                    "判定": result,
-                    "備考": memo
-                }])
-                
-                # 【重要】スプレッドシートに直接「追記」する命令
-                conn.create(data=new_row)
-                
-                st.balloons()
-                st.success("スプレッドシートに保存しました！")
-            except Exception as e:
-                st.error(f"接続エラーが発生しました。Secretsの設定を確認してください。: {e}")
+  if submitted:
+        try:
+            # スプレッドシートに接続
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            
+            # ttl=0 をつけて「常に最新」を読み込み、dropna(how="all") で「空っぽの行」を無視する！
+            existing_data = conn.read(worksheet="シート1", ttl=0)
+            existing_data = existing_data.dropna(how="all") 
+            
+            # 新しいデータを作成
+            new_data = pd.DataFrame([{
+                "点検日": str(check_date),
+                "ME No.": me_no,
+                "機種": model_type,
+                "実施者": inspector,
+                "判定": result,
+                "備考": memo
+            }])
+            
+            # データを合体させて上書き保存
+            updated_df = pd.concat([existing_data, new_data], ignore_index=True)
+            conn.update(worksheet="シート1", data=updated_df)
+            
+            # アプリの記憶（キャッシュ）をリセットしてスッキリさせる
+            st.cache_data.clear()
+            
+            st.balloons()
+            st.success("大成功！スプレッドシートの2行目を確認してください！")
+        except Exception as e:
+            st.error(f"エラー発生: {e}")
