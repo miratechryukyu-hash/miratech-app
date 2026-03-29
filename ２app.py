@@ -12,7 +12,16 @@ tab1, tab2 = st.tabs(["📝 点検の入力", "🔍 過去の履歴確認"])
 
 # ====== タブ1：入力画面 ======
 with tab1:
-    model_type = st.selectbox("▼ 点検する機種を選択してください", ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"])
+    # 【進化ポイント】まずは大まかな種類を選びます
+    device_category = st.selectbox("▼ 点検する機器の種類", ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"])
+    
+    # 選んだ種類によって、次の「型式」の選択肢が自動で切り替わります！
+    if device_category == "輸液ポンプ":
+        device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
+    elif device_category == "シリンジポンプ":
+        device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
+    else:
+        device_model = st.text_input("▼ 型式を入力してください")
     
     st.markdown("---")
 
@@ -20,40 +29,47 @@ with tab1:
         check_date = st.date_input("点検日", date.today())
         me_no = st.text_input("ME No.", placeholder="例: NT-001")
         
-        st.write(f"### 📋 【{model_type}】専用チェック項目")
+        st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
         # ＝＝＝ 輸液ポンプが選ばれた時の画面 ＝＝＝
-        if model_type == "輸液ポンプ":
+        if device_category == "輸液ポンプ":
             st.write("**① 外観・作動・警報チェック**")
             col1, col2, col3 = st.columns(3)
             with col1: chk_app = st.checkbox("外観点検 OK", value=True)
             with col2: chk_op = st.checkbox("作動点検 OK", value=True)
             with col3: chk_alm = st.checkbox("各種警報 OK", value=True)
             
-            st.write("**② 数値・精度チェック (TE-281等)**")
+            st.write("**② 数値・精度チェック**")
             col_num1, col_num2 = st.columns(2)
             with col_num1:
-                flow_acc = st.number_input("流量精度 (18~22ml)", value=20.0, step=0.1)
+                flow_acc = st.number_input("流量精度 (ml)", value=20.0, step=0.1)
             with col_num2:
-                occ_press = st.number_input("下部閉塞検出 (30~90kpa)", value=50.0, step=1.0)
+                occ_press = st.number_input("閉塞検出圧 (kpa/mmHg)", value=50.0, step=1.0)
             
-            battery = st.number_input("内蔵バッテリ (750以上)", value=800, step=10)
+            battery = st.number_input("内蔵バッテリ (内部数値など)", value=800, step=10)
             
             exterior_result = "異常なし" if (chk_app and chk_op and chk_alm) else "異常あり"
-            detail_result = f"外観:{'OK' if chk_app else 'NG'}, 作動:{'OK' if chk_op else 'NG'}, 警報:{'OK' if chk_alm else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}kpa, バッテリ:{battery}"
+            detail_result = f"外観:{'OK' if chk_app else 'NG'}, 作動:{'OK' if chk_op else 'NG'}, 警報:{'OK' if chk_alm else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}, バッテリ:{battery}"
 
         # ＝＝＝ シリンジポンプが選ばれた時の画面 ＝＝＝
-        elif model_type == "シリンジポンプ":
+        elif device_category == "シリンジポンプ":
             st.write("**① 外観・作動・警報チェック**")
-            col1, col2 = st.columns(2)
-            with col1: chk_app_s = st.checkbox("外観・プランジャ動作 OK", value=True)
-            with col2: chk_alm_s = st.checkbox("シリンジ外れ・残量警報 OK", value=True)
+            col1, col2, col3 = st.columns(3)
+            with col1: chk_app_s = st.checkbox("外観・プランジャ OK", value=True)
+            with col2: chk_op_s = st.checkbox("作動点検 OK", value=True)
+            with col3: chk_alm_s = st.checkbox("警報(シリンジ外れ等) OK", value=True)
             
             st.write("**② 数値・精度チェック**")
-            flow_acc_s = st.number_input("流量精度チェック (ml)", value=10.0, step=0.1)
+            col_num1_s, col_num2_s = st.columns(2)
+            with col_num1_s:
+                flow_acc_s = st.number_input("流量精度チェック (ml)", value=10.0, step=0.1)
+            with col_num2_s:
+                occ_press_s = st.number_input("閉塞検出圧チェック", value=80.0, step=1.0)
+                
+            battery_s = st.number_input("内蔵バッテリチェック", value=0.0, step=0.1)
             
-            exterior_result = "異常なし" if (chk_app_s and chk_alm_s) else "異常あり"
-            detail_result = f"外観/動作:{'OK' if chk_app_s else 'NG'}, 警報:{'OK' if chk_alm_s else 'NG'} | 流量:{flow_acc_s}ml"
+            exterior_result = "異常なし" if (chk_app_s and chk_op_s and chk_alm_s) else "異常あり"
+            detail_result = f"外観/動作:{'OK' if chk_app_s else 'NG'}, 警報:{'OK' if chk_alm_s else 'NG'} | 流量:{flow_acc_s}ml, 閉塞:{occ_press_s}, バッテリ:{battery_s}"
 
         # ＝＝＝ 人工呼吸器・その他が選ばれた時の画面 ＝＝＝
         else:
@@ -83,10 +99,13 @@ with tab1:
                 if is_duplicate:
                     st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！大丈夫ですか？")
                 else:
+                    # スプレッドシートの「機種」列には「シリンジポンプ (TE-381)」のように合体させて記録します
+                    combined_model = f"{device_category} ({device_model})"
+                    
                     new_data = pd.DataFrame([{
                         "点検日": str(check_date),
                         "ME No.": me_no,
-                        "機種": model_type,
+                        "機種": combined_model,
                         "外装点検": exterior_result,    
                         "精度チェック": detail_result, 
                         "実施者": inspector,
