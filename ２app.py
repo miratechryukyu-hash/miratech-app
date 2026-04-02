@@ -3,22 +3,52 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import date
 
-# ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
-# ==========================================
-# 💡【新機能】URLからME No.を読み取る魔法のコード
-# ==========================================
-# URLに "?me_no=〇〇" があれば取得し、なければ空っぽにする
+# URLからME No.を取得
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
 st.title("🏥 医療機器点検アプリ (miratech)")
 
-# URLから番号を取得できた場合は、画面に小さくお知らせを出します
+# ==========================================
+# 💡【大進化】QRから読み込んだ場合の「専用カルテ」表示機能
+# ==========================================
 if url_me_no:
-    st.info(f"📱 QRコードを読み込みました！ 対象機器: **{url_me_no}**")
+    st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
+    
+    try:
+        # スプレッドシートからデータを取得
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_all = conn.read(worksheet="シート1", ttl=0).dropna(how="all")
+        
+        # 読み込んだME No.のデータだけを抜き出す
+        if "ME No." in df_all.columns:
+            df_device = df_all[df_all["ME No."].astype(str) == url_me_no]
+            
+            if not df_device.empty:
+                # 一番新しい（一番下の）データを取得
+                latest_data = df_device.iloc[-1]
+                
+                st.write("### 📊 機器ステータス (最新情報)")
+                col1, col2, col3 = st.columns(3)
+                # metricという機能を使って、数字や状態をカッコよく目立たせます
+                col1.metric("最終点検日", str(latest_data["点検日"]))
+                col2.metric("総合評価", str(latest_data["判定"]))
+                col3.metric("これまでの点検回数", f"{len(df_device)} 回")
+                
+                # 折りたたみ式で過去の全履歴も見れるようにする
+                with st.expander("📝 この機器の過去の履歴をすべて見る"):
+                    st.dataframe(df_device.iloc[::-1], use_container_width=True)
+            else:
+                st.info("💡 この機器の過去の点検記録はまだありません。（新規登録）")
+    except Exception as e:
+        st.warning("データの読み込みに失敗しました。")
+        
+    st.markdown("---")
 
+
+# 以降はいつものタブ画面
 tab1, tab2 = st.tabs(["📝 点検の入力", "🔍 過去の履歴確認"])
 
 # ====== タブ1：入力画面 ======
@@ -37,7 +67,7 @@ with tab1:
     with st.form("check_form"):
         check_date = st.date_input("点検日", date.today())
         
-        # 💡【変更点】URLから読み取った番号(url_me_no)を最初から入力しておく設定にしました！
+        # URLからの番号が最初から入る
         me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
@@ -162,7 +192,7 @@ with tab1:
                     
                     st.cache_data.clear()
                     st.balloons()
-                    st.success(f"大成功！{me_no} の点検データを記録しました！")
+                    st.success(f"大成功！{me_no} の点検データを記録しました！最新データを表示するにはページを更新してください。")
                     
             except Exception as e:
                 st.error(f"エラー発生: {e}")
@@ -181,7 +211,6 @@ with tab2:
         if df.empty:
             st.info("まだ点検記録がありません。")
         else:
-            # 💡【変更点】ここでも、URLから読み取った番号が最初から検索窓に入っているようにします！
             search_query = st.text_input("🔍 探したい「ME No.」を入力してください", value=url_me_no)
             
             if search_query:
