@@ -13,14 +13,13 @@ st.title("🏥 医療機器点検アプリ (miratech)")
 categories_list = ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"]
 
 # ==========================================
-# 💡 QRダッシュボード（全シートから自動で探し出す魔法）
+# 💡 QRダッシュボード
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
     device_found = False
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        # 4つのシートを順番に探す
         for cat in categories_list:
             try:
                 df_cat = conn.read(worksheet=cat, ttl=0).dropna(how="all")
@@ -41,7 +40,7 @@ if url_me_no:
                             st.write("### 🩺 最新＆過去の点検ステータス")
                             st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
                         device_found = True
-                        break # 見つかったら探すのをやめる
+                        break
             except Exception:
                 continue
         
@@ -80,11 +79,15 @@ with tab1:
         serial_no = st.text_input("製造番号 (S/N)", placeholder="例: 12345678")
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
+        # 変数を初期化
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
         chk_op1=chk_op2=chk_op3 = False
+        
         chk_es1=chk_es2=chk_es3=chk_es4=chk_es5=chk_es6 = False
         chk_as1=chk_as2=chk_as3=chk_as4=chk_as5 = False
+        chk_sop1=chk_sop2=chk_sop3 = False # 💡シリンジポンプ用の作動点検を追加
+        
         flow_acc=occ_press = 0.0
         bubble_ad_water=bubble_ad_nowater = 0
         
@@ -145,6 +148,16 @@ with tab1:
                     chk_es4 = st.checkbox("スライダー・クラッチ動作", value=True)
                     chk_es5 = st.checkbox("AC・DC切り替え", value=True)
                     chk_es6 = st.checkbox("セルフチェック・LED", value=True)
+                
+                # 💡 シリンジポンプの作動点検を追加
+                st.write("**【その他の作動点検】**")
+                col7, col8 = st.columns(2)
+                with col7:
+                    chk_sop1 = st.checkbox("積算クリア機能", value=True)
+                    chk_sop2 = st.checkbox("流量設定", value=True)
+                with col8:
+                    chk_sop3 = st.checkbox("日付・時刻設定", value=True)
+
                 st.write("**【各種警報点検】**")
                 col3, col4 = st.columns(2)
                 with col3:
@@ -162,7 +175,7 @@ with tab1:
             with col_num2_s:
                 occ_press = st.number_input("閉塞検出圧 (kpa)", value=80.0, step=1.0)
                 
-            ext_all_ok_s = all([chk_es1, chk_es2, chk_es3, chk_es4, chk_es5, chk_es6])
+            ext_all_ok_s = all([chk_es1, chk_es2, chk_es3, chk_es4, chk_es5, chk_es6, chk_sop1, chk_sop2, chk_sop3])
             alm_all_ok_s = all([chk_as1, chk_as2, chk_as3, chk_as4, chk_as5])
             exterior_result = "異常なし" if (ext_all_ok_s and alm_all_ok_s) else "異常あり"
             detail_result = f"外観/警報:{'OK' if (ext_all_ok_s and alm_all_ok_s) else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}"
@@ -185,13 +198,11 @@ with tab1:
         else:
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
-                # 💡 ここが進化！ 選んだカテゴリーと同じ名前のシートを読み込む
                 target_sheet = device_category
                 
                 try:
                     existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all") 
                 except Exception:
-                    # シートがまだ作られていない場合のエラー回避用（空のデータフレームを作る）
                     existing_data = pd.DataFrame()
                 
                 is_duplicate = False
@@ -246,6 +257,9 @@ with tab1:
                             "残量_閉塞警報": "〇" if chk_as3 else "×",
                             "開始忘れ_流量設定無し": "〇" if chk_as4 else "×",
                             "消音機能_再警報": "〇" if chk_as5 else "×",
+                            "積算クリア機能": "〇" if chk_sop1 else "×", # 💡追加
+                            "流量設定": "〇" if chk_sop2 else "×", # 💡追加
+                            "日付・時刻設定": "〇" if chk_sop3 else "×", # 💡追加
                             "流量精度値": flow_acc,
                             "閉塞検出圧値": occ_press
                         })
@@ -253,7 +267,6 @@ with tab1:
                     new_data = pd.DataFrame([data_dict])
                     updated_df = pd.concat([existing_data, new_data], ignore_index=True)
                     
-                    # 💡 指定したシートに書き込む
                     conn.update(worksheet=target_sheet, data=updated_df)
                     st.cache_data.clear()
                     st.balloons()
@@ -264,7 +277,6 @@ with tab1:
 # ====== タブ2：マスター ======
 with tab2:
     st.subheader("🏥 機器マスター")
-    # 💡 どのシートを見るか選べるようにしました
     view_cat_master = st.selectbox("📂 読み込むシートを選択", categories_list, key="master_cat")
     
     if st.button("🔄 台帳を更新する"):
