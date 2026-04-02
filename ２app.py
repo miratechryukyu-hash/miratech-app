@@ -12,7 +12,7 @@ url_me_no = query_params.get("me_no", "")
 st.title("🏥 医療機器点検アプリ (miratech)")
 
 # ==========================================
-# 💡 QRダッシュボード（QRから来た時だけ表示）
+# 💡 QRダッシュボード
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
@@ -43,7 +43,7 @@ if url_me_no:
 
 
 # ==========================================
-# 💡 アプリ本体メニュー（シンプルに3タブへ）
+# 💡 アプリ本体メニュー
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴"])
 
@@ -68,6 +68,13 @@ with tab1:
         
         serial_no = st.text_input("製造番号 (S/N)", placeholder="例: 12345678")
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
+        
+        # 変数を初期化
+        chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
+        chk_a1=chk_a2=chk_a3=chk_a4 = False
+        chk_es1=chk_es2=chk_es3=chk_es4=chk_es5=chk_es6 = False
+        chk_as1=chk_as2=chk_as3=chk_as4=chk_as5 = False
+        flow_acc=occ_press=battery = 0.0
         
         if device_category == "輸液ポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
@@ -98,10 +105,6 @@ with tab1:
             with col_num2:
                 occ_press = st.number_input("閉塞検出圧 (kpa/mmHg)", value=50.0, step=1.0)
             battery = st.number_input("内蔵バッテリ", value=800, step=10)
-            ext_all_ok = all([chk_e1, chk_e2, chk_e3, chk_e4, chk_e5, chk_e6, chk_e7])
-            alm_all_ok = all([chk_a1, chk_a2, chk_a3, chk_a4])
-            exterior_result = "異常なし" if (ext_all_ok and alm_all_ok) else "異常あり"
-            detail_result = f"外観/警報:{'OK' if (ext_all_ok and alm_all_ok) else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}, バッテリ:{battery}"
 
         elif device_category == "シリンジポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
@@ -128,14 +131,10 @@ with tab1:
             st.write("**② 数値・精度チェック**")
             col_num1_s, col_num2_s = st.columns(2)
             with col_num1_s:
-                flow_acc_s = st.number_input("流量精度チェック (ml)", value=10.0, step=0.1)
+                flow_acc = st.number_input("流量精度チェック (ml)", value=10.0, step=0.1)
             with col_num2_s:
-                occ_press_s = st.number_input("閉塞検出圧 (kpa)", value=80.0, step=1.0)
-            battery_s = st.number_input("内蔵バッテリ", value=0.0, step=0.1)
-            ext_all_ok_s = all([chk_es1, chk_es2, chk_es3, chk_es4, chk_es5, chk_es6])
-            alm_all_ok_s = all([chk_as1, chk_as2, chk_as3, chk_as4, chk_as5])
-            exterior_result = "異常なし" if (ext_all_ok_s and alm_all_ok_s) else "異常あり"
-            detail_result = f"外観/警報:{'OK' if (ext_all_ok_s and alm_all_ok_s) else 'NG'} | 流量:{flow_acc_s}ml, 閉塞:{occ_press_s}, バッテリ:{battery_s}"
+                occ_press = st.number_input("閉塞検出圧 (kpa)", value=80.0, step=1.0)
+            battery = st.number_input("内蔵バッテリ", value=0.0, step=0.1)
 
         else:
             exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
@@ -148,6 +147,7 @@ with tab1:
         
         submitted = st.form_submit_button("スプレッドシートに保存")
 
+    # ＝＝＝ 保存処理（細かく分けて保存する！） ＝＝＝
     if submitted:
         if not me_no:
             st.warning("⚠️ ME No.を入力してください")
@@ -158,26 +158,65 @@ with tab1:
                 is_duplicate = False
                 if "ME No." in existing_data.columns and "点検日" in existing_data.columns:
                     is_duplicate = ((existing_data["ME No."] == me_no) & (existing_data["点検日"].astype(str) == str(check_date))).any()
+                
                 if is_duplicate:
-                    st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！大丈夫ですか？")
+                    st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！")
                 else:
                     combined_model = f"{device_category} ({device_model})"
-                    new_data = pd.DataFrame([{
+                    
+                    # 💡 【大進化】細分化したデータを辞書（リスト）にする
+                    data_dict = {
                         "点検日": str(check_date),
                         "ME No.": me_no,
-                        "機種": combined_model,
                         "製造番号": serial_no,
-                        "外装点検": exterior_result,    
-                        "精度チェック": detail_result, 
+                        "機種": combined_model,
                         "実施者": inspector,
                         "判定": result,
                         "備考": memo
-                    }])
+                    }
+                    
+                    # 機種ごとに異なるチェック項目を「〇」「×」に変換して追加
+                    if device_category == "輸液ポンプ":
+                        data_dict.update({
+                            "本体の汚れ・破損": "〇" if chk_e1 else "×",
+                            "ポールクランプ用ネジ穴": "〇" if chk_e2 else "×",
+                            "チューブクランプ動作": "〇" if chk_e3 else "×",
+                            "フィンガー部動作": "〇" if chk_e4 else "×",
+                            "AC・DC切り替え": "〇" if chk_e5 else "×",
+                            "セルフチェック機能": "〇" if chk_e6 else "×",
+                            "表示部LED": "〇" if chk_e7 else "×",
+                            "開始忘れ_流量設定無し": "〇" if chk_a1 else "×",
+                            "気泡検出_ドアオープン": "〇" if chk_a2 else "×",
+                            "輸液完了_再警報": "〇" if chk_a3 else "×",
+                            "消音機能": "〇" if chk_a4 else "×",
+                            "流量精度値": flow_acc,
+                            "閉塞検出圧値": occ_press,
+                            "バッテリ値": battery
+                        })
+                    elif device_category == "シリンジポンプ":
+                        data_dict.update({
+                            "本体の汚れ・破損": "〇" if chk_es1 else "×",
+                            "ポールクランプ用ネジ穴": "〇" if chk_es2 else "×",
+                            "シリンジクランプ動作": "〇" if chk_es3 else "×",
+                            "スライダー_クラッチ動作": "〇" if chk_es4 else "×",
+                            "AC・DC切り替え": "〇" if chk_es5 else "×",
+                            "セルフチェック機能": "〇" if chk_es6 else "×",
+                            "外れ_サイズ認識": "〇" if chk_as1 else "×",
+                            "押し子_クラッチ外れ": "〇" if chk_as2 else "×",
+                            "残量_閉塞_バッテリ警報": "〇" if chk_as3 else "×",
+                            "開始忘れ_流量設定無し": "〇" if chk_as4 else "×",
+                            "消音機能_再警報": "〇" if chk_as5 else "×",
+                            "流量精度値": flow_acc,
+                            "閉塞検出圧値": occ_press,
+                            "バッテリ値": battery
+                        })
+
+                    new_data = pd.DataFrame([data_dict])
                     updated_df = pd.concat([existing_data, new_data], ignore_index=True)
                     conn.update(worksheet="シート1", data=updated_df)
                     st.cache_data.clear()
                     st.balloons()
-                    st.success(f"大成功！{me_no} の点検データを記録しました！")
+                    st.success(f"大成功！{me_no} の詳細データをバラバラにしてスプレッドシートに記録しました！")
             except Exception as e:
                 st.error(f"エラー発生: {e}")
 
