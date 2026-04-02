@@ -6,7 +6,18 @@ from datetime import date
 # ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
+# ==========================================
+# 💡【新機能】URLからME No.を読み取る魔法のコード
+# ==========================================
+# URLに "?me_no=〇〇" があれば取得し、なければ空っぽにする
+query_params = st.query_params
+url_me_no = query_params.get("me_no", "")
+
 st.title("🏥 医療機器点検アプリ (miratech)")
+
+# URLから番号を取得できた場合は、画面に小さくお知らせを出します
+if url_me_no:
+    st.info(f"📱 QRコードを読み込みました！ 対象機器: **{url_me_no}**")
 
 tab1, tab2 = st.tabs(["📝 点検の入力", "🔍 過去の履歴確認"])
 
@@ -25,11 +36,12 @@ with tab1:
 
     with st.form("check_form"):
         check_date = st.date_input("点検日", date.today())
-        me_no = st.text_input("ME No.", placeholder="例: NT-001")
+        
+        # 💡【変更点】URLから読み取った番号(url_me_no)を最初から入力しておく設定にしました！
+        me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
-        # ＝＝＝ 輸液ポンプが選ばれた時の画面 ＝＝＝
         if device_category == "輸液ポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック（タップで開く）", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -68,7 +80,6 @@ with tab1:
             exterior_result = "異常なし" if (ext_all_ok and alm_all_ok) else "異常あり"
             detail_result = f"外観/警報:{'OK' if (ext_all_ok and alm_all_ok) else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}, バッテリ:{battery}"
 
-        # ＝＝＝ シリンジポンプが選ばれた時の画面 ＝＝＝
         elif device_category == "シリンジポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック（タップで開く）", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -107,7 +118,6 @@ with tab1:
             exterior_result = "異常なし" if (ext_all_ok_s and alm_all_ok_s) else "異常あり"
             detail_result = f"外観/警報:{'OK' if (ext_all_ok_s and alm_all_ok_s) else 'NG'} | 流量:{flow_acc_s}ml, 閉塞:{occ_press_s}, バッテリ:{battery_s}"
 
-        # ＝＝＝ 人工呼吸器・その他が選ばれた時の画面 ＝＝＝
         else:
             exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
             detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
@@ -119,7 +129,6 @@ with tab1:
         
         submitted = st.form_submit_button("スプレッドシートに保存")
 
-    # ＝＝＝ 保存処理 ＝＝＝
     if submitted:
         if not me_no:
             st.warning("⚠️ ME No.を入力してください")
@@ -172,9 +181,10 @@ with tab2:
         if df.empty:
             st.info("まだ点検記録がありません。")
         else:
-            search_query = st.text_input("🔍 探したい「ME No.」を入力してください")
+            # 💡【変更点】ここでも、URLから読み取った番号が最初から検索窓に入っているようにします！
+            search_query = st.text_input("🔍 探したい「ME No.」を入力してください", value=url_me_no)
+            
             if search_query:
-                # 💡 ここを修正しました！（if ではなく df = に変更）
                 df = df[df["ME No."].astype(str).fillna("").str.contains(search_query, case=False)]
                 st.write(f"「{search_query}」の検索結果: {len(df)} 件")
             
