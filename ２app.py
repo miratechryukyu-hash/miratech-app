@@ -6,61 +6,6 @@ from datetime import date
 # ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
-# ==========================================
-# 💡【新機能】印刷マジック＆ダークモード対策CSS
-# ==========================================
-st.markdown("""
-<style>
-/* 画面上の証明書デザイン（ダークモードでも絶対に白背景・黒文字にする） */
-.cert-box {
-    background-color: #ffffff !important;
-    color: #000000 !important;
-    padding: 30px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-}
-.cert-box * {
-    color: #000000 !important;
-}
-.cert-box th {
-    background-color: #f4f4f4 !important;
-}
-
-/* 🖨️ 印刷ボタンを押した時だけ発動する魔法 */
-@media print {
-    /* Streamlitのヘッダー、サイドバー、余計なメニューを全て消す */
-    header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"] {
-        display: none !important;
-    }
-    /* タブの切り替えボタンを消す */
-    [data-testid="stTabs"] > div:first-child {
-        display: none !important;
-    }
-    /* 機種を選ぶドロップダウン（Selectbox）を消す */
-    [data-testid="stSelectbox"] {
-        display: none !important;
-    }
-    /* 画面の余白をゼロにして、A4用紙全体を使う */
-    .main .block-container {
-        max-width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    /* 枠線を消して、本物の紙のように見せる */
-    .cert-box {
-        border: none !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-    }
-    /* 色（緑や赤の枠線、グレーの背景）を印刷に反映させる */
-    * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
-
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
@@ -95,7 +40,6 @@ if url_me_no:
     except Exception as e:
         st.warning("データの読み込みに失敗しました。")
     st.markdown("---")
-
 
 # ==========================================
 # 💡 アプリ本体
@@ -238,7 +182,7 @@ with tab1:
             except Exception as e:
                 st.error(f"エラー発生: {e}")
 
-# ====== タブ2：機器マスター一覧 ======
+# ====== タブ2：マスター ======
 with tab2:
     st.subheader("🏥 機器カテゴリ別の一覧")
     if st.button("🔄 台帳を更新する", key="master_update"):
@@ -260,7 +204,7 @@ with tab2:
     except Exception as e:
         st.error(f"データの読み込みに失敗しました: {e}")
 
-# ====== タブ3：全履歴確認画面 ======
+# ====== タブ3：全履歴 ======
 with tab3:
     st.subheader("📊 すべての点検履歴データ")
     if st.button("🔄 最新のデータを読み込む", key="history_update"):
@@ -279,12 +223,10 @@ with tab3:
     except Exception as e:
         st.error(f"データの読み込みに失敗しました: {e}")
 
-# ==========================================
-# 💡【完成版】タブ4：そのまま印刷できる証明書画面
-# ==========================================
+# ====== タブ4：レポート出力 ======
 with tab4:
     st.subheader("📄 保守点検済証 の発行")
-    st.info("💡 **印刷方法:** 下に証明書が表示されたら、iPhone画面下の **「共有（↑）」ボタンから「プリント」** を選んでください。余計なメニューが自動で消えて、綺麗に印刷されます！")
+    st.write("対象の機器を選ぶと、証明書が表示されます。")
     
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -302,64 +244,135 @@ with tab4:
                 exterior_text = latest_record.get('外装点検', '-')
                 exterior_color = "#28a745" if "異常なし" in exterior_text else "#dc3545"
                 
-                # ▼ ダークモードの影響を受けない「真っ白」な証明書デザイン ▼
+                st.markdown("---")
+                # ▼ 前の前のやつ（画面上で綺麗に見えるバージョン） ▼
                 st.markdown(f"""
-                <div class="cert-box">
-                    <div style="text-align: right; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
+                <div style="font-family: sans-serif; color: #333; max-width: 800px; margin: 0 auto; padding: 30px; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.1); background-color: white;">
+                    <div style="text-align: right; font-size: 14px; margin-bottom: 20px; line-height: 1.6; color: #333;">
                         発行日： {date.today().strftime('%Y年%m月%d日')}<br>
                         点検実施： <b>miratech Ryukyu</b><br>
                         臨床工学技士： <b>{latest_record.get('実施者', '安富 翔')}</b>
                     </div>
-                    
-                    <h2 style="text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 30px; letter-spacing: 2px; border-bottom: 2px solid #000; padding-bottom: 10px;">
+                    <h2 style="text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 30px; letter-spacing: 2px; border-bottom: 2px solid #333; padding-bottom: 10px; color: #333;">
                         医療機器 保守点検済証
                     </h2>
-                    
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 15px;">
                         <tr>
-                            <th style="border: 1px solid #999; padding: 10px; width: 20%; text-align: left;">管理番号 (ME No.)</th>
-                            <td style="border: 1px solid #999; padding: 10px; width: 30%;"><b>{latest_record.get('ME No.', '-')}</b></td>
-                            <th style="border: 1px solid #999; padding: 10px; width: 20%; text-align: left;">点検日</th>
-                            <td style="border: 1px solid #999; padding: 10px; width: 30%;">{latest_record.get('点検日', '-')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left; color: #333;">管理番号 (ME No.)</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%; color: #333;"><b>{latest_record.get('ME No.', '-')}</b></td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left; color: #333;">点検日</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%; color: #333;">{latest_record.get('点検日', '-')}</td>
                         </tr>
                         <tr>
-                            <th style="border: 1px solid #999; padding: 10px; text-align: left;">機種名</th>
-                            <td style="border: 1px solid #999; padding: 10px;">{latest_record.get('機種', '-')}</td>
-                            <th style="border: 1px solid #999; padding: 10px; text-align: left;">製造番号 (S/N)</th>
-                            <td style="border: 1px solid #999; padding: 10px;">{latest_record.get('製造番号', '未登録')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left; color: #333;">機種名</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;">{latest_record.get('機種', '-')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left; color: #333;">製造番号 (S/N)</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;">{latest_record.get('製造番号', '未登録')}</td>
                         </tr>
                     </table>
-
-                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px;">■ 点検結果詳細</h3>
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px; color: #333;">■ 点検結果詳細</h3>
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
-                        <tr>
-                            <th style="border: 1px solid #999; padding: 10px; text-align: left; width: 30%;">点検項目</th>
-                            <th style="border: 1px solid #999; padding: 10px; text-align: center; width: 35%;">判定 / 測定値</th>
-                            <th style="border: 1px solid #999; padding: 10px; text-align: left; width: 35%;">許容値・基準</th>
+                        <tr style="background-color: #f8f9fa;">
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 30%; color: #333;">点検項目</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: center; width: 35%; color: #333;">判定 / 測定値</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 35%; color: #333;">許容値・基準</th>
                         </tr>
                         <tr>
-                            <td style="border: 1px solid #999; padding: 10px;"><b>外観・作動・各種警報</b></td>
-                            <td style="border: 1px solid #999; padding: 10px; text-align: center; font-weight: bold; color: {exterior_color} !important;">{exterior_text}</td>
-                            <td style="border: 1px solid #999; padding: 10px; font-size: 12px;">汚れ・破損なきこと<br>警報が正常に作動すること</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;"><b>外観・作動・各種警報</b></td>
+                            <td style="border: 1px solid #bbb; padding: 10px; text-align: center; font-weight: bold; color: {exterior_color};">{exterior_text}</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; font-size: 12px; color: #555;">汚れ・破損なきこと<br>警報が正常に作動すること</td>
                         </tr>
                         <tr>
-                            <td style="border: 1px solid #999; padding: 10px;"><b>精度・数値チェック</b></td>
-                            <td style="border: 1px solid #999; padding: 10px; line-height: 1.6;">{latest_record.get('精度チェック', '-')}</td>
-                            <td style="border: 1px solid #999; padding: 10px; font-size: 12px;">※当該機種のメーカー規定<br>および許容範囲内であること</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;"><b>精度・数値チェック</b></td>
+                            <td style="border: 1px solid #bbb; padding: 10px; line-height: 1.6; color: #333;">{latest_record.get('精度チェック', '-')}</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; font-size: 12px; color: #555;">※当該機種のメーカー規定<br>および許容範囲内であること</td>
                         </tr>
                     </table>
-
-                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px;">■ 総合評価</h3>
-                    <div style="border: 2px solid {result_color}; padding: 15px; text-align: center; font-size: 22px; font-weight: bold; border-radius: 5px; color: {result_color} !important; letter-spacing: 5px;">
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px; color: #333;">■ 総合評価</h3>
+                    <div style="border: 2px solid {result_color}; padding: 15px; text-align: center; font-size: 22px; font-weight: bold; border-radius: 5px; color: {result_color}; letter-spacing: 5px; background-color: #fdfdfd;">
                         {result_text}
                     </div>
-                    
+                    <div style="margin-top: 30px; font-size: 14px; color: #333;">
+                        <b>特記事項・備考：</b><br>
+                        <div style="border: 1px solid #bbb; padding: 10px; min-height: 60px; background-color: #fdfdfd; margin-top: 5px; white-space: pre-wrap; color: #333;">{latest_record.get('備考', '特になし')}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # ▼ 完璧な証明書だけが入ったHTMLデータを作成 ▼
+                download_html = f"""
+                <!DOCTYPE html>
+                <html lang="ja">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>保守点検済証_{target_me}</title>
+                    <style>
+                        body {{ font-family: "Helvetica Neue", Arial, sans-serif; color: #333; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 40px; background-color: #fff; }}
+                        table {{ width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 15px; }}
+                        th, td {{ border: 1px solid #999; padding: 10px; color: #333; }}
+                        th {{ background-color: #f4f4f4; text-align: left; }}
+                        .result-box {{ border: 2px solid {result_color}; padding: 15px; text-align: center; font-size: 22px; font-weight: bold; border-radius: 5px; color: {result_color}; letter-spacing: 5px; }}
+                        @media print {{
+                            .no-print {{ display: none; }}
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+                        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">🖨️ この証明書を印刷する</button>
+                        <p style="font-size: 12px; color: #666; margin-top: 10px;">印刷が終わったら、ブラウザの「戻る」ボタン等でアプリに戻ってください。</p>
+                    </div>
+                    <div style="text-align: right; font-size: 14px; margin-bottom: 20px;">
+                        発行日： {date.today().strftime('%Y年%m月%d日')}<br>
+                        点検実施： <b>miratech Ryukyu</b><br>
+                        臨床工学技士： <b>{latest_record.get('実施者', '安富 翔')}</b>
+                    </div>
+                    <h2 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">医療機器 保守点検済証</h2>
+                    <table>
+                        <tr>
+                            <th style="width: 20%;">管理番号 (ME No.)</th><td style="width: 30%;"><b>{latest_record.get('ME No.', '-')}</b></td>
+                            <th style="width: 20%;">点検日</th><td style="width: 30%;">{latest_record.get('点検日', '-')}</td>
+                        </tr>
+                        <tr>
+                            <th>機種名</th><td>{latest_record.get('機種', '-')}</td>
+                            <th>製造番号 (S/N)</th><td>{latest_record.get('製造番号', '未登録')}</td>
+                        </tr>
+                    </table>
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px;">■ 点検結果詳細</h3>
+                    <table>
+                        <tr style="background-color: #f4f4f4;">
+                            <th style="width: 30%;">点検項目</th><th style="width: 35%; text-align: center;">判定 / 測定値</th><th style="width: 35%;">許容値・基準</th>
+                        </tr>
+                        <tr>
+                            <td><b>外観・作動・各種警報</b></td>
+                            <td style="text-align: center; font-weight: bold; color: {exterior_color};">{exterior_text}</td>
+                            <td style="font-size: 12px;">汚れ・破損なきこと<br>警報が正常に作動すること</td>
+                        </tr>
+                        <tr>
+                            <td><b>精度・数値チェック</b></td>
+                            <td style="line-height: 1.6;">{latest_record.get('精度チェック', '-')}</td>
+                            <td style="font-size: 12px;">※当該機種のメーカー規定<br>および許容範囲内であること</td>
+                        </tr>
+                    </table>
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px;">■ 総合評価</h3>
+                    <div class="result-box">{result_text}</div>
                     <div style="margin-top: 30px; font-size: 14px;">
                         <b>特記事項・備考：</b><br>
                         <div style="border: 1px solid #999; padding: 15px; min-height: 80px; margin-top: 5px; white-space: pre-wrap;">{latest_record.get('備考', '特になし')}</div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                </body>
+                </html>
+                """
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.download_button(
+                    label="📥 この証明書データを保存する（印刷用）",
+                    data=download_html,
+                    file_name=f"点検済証_{target_me}.html",
+                    mime="text/html"
+                )
+                st.markdown("<p style='text-align:center; color:#888; font-size:12px; margin-top:5px;'>※ダウンロードしたファイルを開くと、メニューのない綺麗な状態で印刷できます</p>", unsafe_allow_html=True)
                 
         else:
             st.info("まだデータがありません。")
