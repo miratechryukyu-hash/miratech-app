@@ -12,34 +12,37 @@ url_me_no = query_params.get("me_no", "")
 st.title("🏥 医療機器点検アプリ (miratech)")
 
 # ==========================================
-# 💡【大進化】QRから読み込んだ場合の「専用カルテ」表示機能
+# 💡 QRダッシュボードも「2つのタブ」に分割してスッキリ！
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
     
     try:
-        # スプレッドシートからデータを取得
         conn = st.connection("gsheets", type=GSheetsConnection)
         df_all = conn.read(worksheet="シート1", ttl=0).dropna(how="all")
         
-        # 読み込んだME No.のデータだけを抜き出す
         if "ME No." in df_all.columns:
             df_device = df_all[df_all["ME No."].astype(str) == url_me_no]
             
             if not df_device.empty:
-                # 一番新しい（一番下の）データを取得
                 latest_data = df_device.iloc[-1]
                 
-                st.write("### 📊 機器ステータス (最新情報)")
-                col1, col2, col3 = st.columns(3)
-                # metricという機能を使って、数字や状態をカッコよく目立たせます
-                col1.metric("最終点検日", str(latest_data["点検日"]))
-                col2.metric("総合評価", str(latest_data["判定"]))
-                col3.metric("これまでの点検回数", f"{len(df_device)} 回")
+                # QRを読み込んだ時専用のミニタブ
+                dash_tab1, dash_tab2 = st.tabs(["🏥 機器の基本情報", "📝 過去の点検履歴"])
                 
-                # 折りたたみ式で過去の全履歴も見れるようにする
-                with st.expander("📝 この機器の過去の履歴をすべて見る"):
-                    st.dataframe(df_device.iloc[::-1], use_container_width=True)
+                with dash_tab1:
+                    st.write("### 📊 機器マスターデータ")
+                    col1, col2 = st.columns(2)
+                    col1.metric("ME No.", str(latest_data.get("ME No.", "-")))
+                    col2.metric("機種", str(latest_data.get("機種", "-")))
+                    
+                    col3, col4 = st.columns(2)
+                    col3.metric("製造番号 (S/N)", str(latest_data.get("製造番号", "未登録")))
+                    col4.metric("これまでの点検回数", f"{len(df_device)} 回")
+
+                with dash_tab2:
+                    st.write("### 🩺 最新＆過去の点検ステータス")
+                    st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
             else:
                 st.info("💡 この機器の過去の点検記録はまだありません。（新規登録）")
     except Exception as e:
@@ -48,8 +51,10 @@ if url_me_no:
     st.markdown("---")
 
 
-# 以降はいつものタブ画面
-tab1, tab2 = st.tabs(["📝 点検の入力", "🔍 過去の履歴確認"])
+# ==========================================
+# 💡 アプリ本体のタブを「3つ」に増やしました！
+# ==========================================
+tab1, tab2, tab3 = st.tabs(["📝 点検の入力", "📁 機器マスター一覧", "🔍 全履歴データ"])
 
 # ====== タブ1：入力画面 ======
 with tab1:
@@ -65,13 +70,18 @@ with tab1:
     st.markdown("---")
 
     with st.form("check_form"):
-        check_date = st.date_input("点検日", date.today())
+        col_form1, col_form2 = st.columns(2)
+        with col_form1:
+            check_date = st.date_input("点検日", date.today())
+        with col_form2:
+            me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
-        # URLからの番号が最初から入る
-        me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
+        # 💡【新機能】製造番号の入力欄を追加！
+        serial_no = st.text_input("製造番号 (S/N)", placeholder="例: 12345678")
         
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
+        # ＝＝＝ 輸液ポンプが選ばれた時の画面 ＝＝＝
         if device_category == "輸液ポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック（タップで開く）", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -110,6 +120,7 @@ with tab1:
             exterior_result = "異常なし" if (ext_all_ok and alm_all_ok) else "異常あり"
             detail_result = f"外観/警報:{'OK' if (ext_all_ok and alm_all_ok) else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}, バッテリ:{battery}"
 
+        # ＝＝＝ シリンジポンプが選ばれた時の画面 ＝＝＝
         elif device_category == "シリンジポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック（タップで開く）", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -148,6 +159,7 @@ with tab1:
             exterior_result = "異常なし" if (ext_all_ok_s and alm_all_ok_s) else "異常あり"
             detail_result = f"外観/警報:{'OK' if (ext_all_ok_s and alm_all_ok_s) else 'NG'} | 流量:{flow_acc_s}ml, 閉塞:{occ_press_s}, バッテリ:{battery_s}"
 
+        # ＝＝＝ 人工呼吸器・その他 ＝＝＝
         else:
             exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
             detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
@@ -159,6 +171,7 @@ with tab1:
         
         submitted = st.form_submit_button("スプレッドシートに保存")
 
+    # ＝＝＝ 保存処理 ＝＝＝
     if submitted:
         if not me_no:
             st.warning("⚠️ ME No.を入力してください")
@@ -180,6 +193,7 @@ with tab1:
                         "点検日": str(check_date),
                         "ME No.": me_no,
                         "機種": combined_model,
+                        "製造番号": serial_no, # 💡追加
                         "外装点検": exterior_result,    
                         "精度チェック": detail_result, 
                         "実施者": inspector,
@@ -192,16 +206,51 @@ with tab1:
                     
                     st.cache_data.clear()
                     st.balloons()
-                    st.success(f"大成功！{me_no} の点検データを記録しました！最新データを表示するにはページを更新してください。")
+                    st.success(f"大成功！{me_no} の点検データを記録しました！")
                     
             except Exception as e:
                 st.error(f"エラー発生: {e}")
 
-# ====== タブ2：履歴確認画面 ======
+# ====== タブ2：機器マスター一覧（カテゴリ別） ======
 with tab2:
-    st.subheader("📊 スプレッドシートのデータを確認")
+    st.subheader("🏥 機器カテゴリ別の一覧 (マスター台帳)")
     
-    if st.button("🔄 最新のデータを読み込む"):
+    if st.button("🔄 台帳を更新する", key="master_update"):
+        st.cache_data.clear()
+        
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(worksheet="シート1", ttl=0).dropna(how="all")
+        
+        if df.empty or "ME No." not in df.columns:
+            st.info("まだ機器の登録データがありません。")
+        else:
+            # 重複を消して「各機器の最新の1件」だけを残す
+            df_master = df.drop_duplicates(subset=["ME No."], keep="last")
+            
+            # カテゴリ（機種）ごとにグループ分けして表示
+            categories = df_master["機種"].unique()
+            
+            for cat in categories:
+                # カテゴリごとに折りたたみメニューを作成
+                with st.expander(f"📁 {cat} の登録一覧", expanded=True):
+                    df_cat = df_master[df_master["機種"] == cat]
+                    
+                    # 画面に表示する列を見やすく絞る
+                    display_cols = ["ME No.", "製造番号", "点検日", "判定"]
+                    # 存在する列だけを抽出して表示
+                    existing_cols = [col for col in display_cols if col in df_cat.columns]
+                    
+                    st.dataframe(df_cat[existing_cols].rename(columns={"点検日": "最終点検日"}), hide_index=True, use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"データの読み込みに失敗しました: {e}")
+
+# ====== タブ3：全履歴確認画面 ======
+with tab3:
+    st.subheader("📊 すべての点検履歴データ")
+    
+    if st.button("🔄 最新のデータを読み込む", key="history_update"):
         st.cache_data.clear()
         
     try:
@@ -217,7 +266,7 @@ with tab2:
                 df = df[df["ME No."].astype(str).fillna("").str.contains(search_query, case=False)]
                 st.write(f"「{search_query}」の検索結果: {len(df)} 件")
             
-            st.dataframe(df.iloc[::-1], use_container_width=True)
+            st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
             
     except Exception as e:
         st.error(f"データの読み込みに失敗しました: {e}")
