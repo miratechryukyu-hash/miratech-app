@@ -224,7 +224,7 @@ with tab3:
         st.error(f"データの読み込みに失敗しました: {e}")
 
 # ==========================================
-# 💡【大進化】タブ4：プロ仕様 PDFレポート出力機能
+# 💡【大進化】タブ4：プロ仕様 PDFレポート出力機能 (文字色修正版)
 # ==========================================
 with tab4:
     st.subheader("📄 保守点検済証 の発行")
@@ -248,62 +248,62 @@ with tab4:
                 exterior_color = "#28a745" if "異常なし" in exterior_text else "#dc3545"
                 
                 st.markdown("---")
-                # 印刷用の美しいHTMLフォーマット（表形式で許容値も記載！）
+                # 印刷用の美しいHTMLフォーマット（文字色を強制的に黒に指定！）
                 st.markdown(f"""
                 <div style="font-family: sans-serif; color: #333; max-width: 800px; margin: 0 auto; padding: 30px; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.1); background-color: white;">
                     
-                    <div style="text-align: right; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
+                    <div style="text-align: right; font-size: 14px; margin-bottom: 20px; line-height: 1.6; color: #333;">
                         発行日： {date.today().strftime('%Y年%m月%d日')}<br>
                         点検実施： <b>miratech Ryukyu</b><br>
                         臨床工学技士： <b>{latest_record.get('実施者', '安富 翔')}</b>
                     </div>
                     
-                    <h2 style="text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 30px; letter-spacing: 2px; border-bottom: 2px solid #333; padding-bottom: 10px;">
+                    <h2 style="text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 30px; letter-spacing: 2px; border-bottom: 2px solid #333; padding-bottom: 10px; color: #333;">
                         医療機器 保守点検済証
                     </h2>
                     
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 15px;">
                         <tr>
-                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left;">管理番号 (ME No.)</th>
-                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%;"><b>{latest_record.get('ME No.', '-')}</b></td>
-                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left;">点検日</th>
-                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%;">{latest_record.get('点検日', '-')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left; color: #333;">管理番号 (ME No.)</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%; color: #333;"><b>{latest_record.get('ME No.', '-')}</b></td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left; color: #333;">点検日</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%; color: #333;">{latest_record.get('点検日', '-')}</td>
                         </tr>
                         <tr>
-                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left;">機種名</th>
-                            <td style="border: 1px solid #bbb; padding: 10px;">{latest_record.get('機種', '-')}</td>
-                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left;">製造番号 (S/N)</th>
-                            <td style="border: 1px solid #bbb; padding: 10px;">{latest_record.get('製造番号', '未登録')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left; color: #333;">機種名</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;">{latest_record.get('機種', '-')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left; color: #333;">製造番号 (S/N)</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;">{latest_record.get('製造番号', '未登録')}</td>
                         </tr>
                     </table>
 
-                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px;">■ 点検結果詳細</h3>
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px; color: #333;">■ 点検結果詳細</h3>
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
                         <tr style="background-color: #f8f9fa;">
-                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 30%;">点検項目</th>
-                            <th style="border: 1px solid #bbb; padding: 10px; text-align: center; width: 35%;">判定 / 測定値</th>
-                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 35%;">許容値・基準</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 30%; color: #333;">点検項目</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: center; width: 35%; color: #333;">判定 / 測定値</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 35%; color: #333;">許容値・基準</th>
                         </tr>
                         <tr>
-                            <td style="border: 1px solid #bbb; padding: 10px;"><b>外観・作動・各種警報</b></td>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;"><b>外観・作動・各種警報</b></td>
                             <td style="border: 1px solid #bbb; padding: 10px; text-align: center; font-weight: bold; color: {exterior_color};">{exterior_text}</td>
                             <td style="border: 1px solid #bbb; padding: 10px; font-size: 12px; color: #555;">汚れ・破損なきこと<br>警報が正常に作動すること</td>
                         </tr>
                         <tr>
-                            <td style="border: 1px solid #bbb; padding: 10px;"><b>精度・数値チェック</b></td>
-                            <td style="border: 1px solid #bbb; padding: 10px; line-height: 1.6;">{latest_record.get('精度チェック', '-')}</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; color: #333;"><b>精度・数値チェック</b></td>
+                            <td style="border: 1px solid #bbb; padding: 10px; line-height: 1.6; color: #333;">{latest_record.get('精度チェック', '-')}</td>
                             <td style="border: 1px solid #bbb; padding: 10px; font-size: 12px; color: #555;">※当該機種のメーカー規定<br>および許容範囲内であること</td>
                         </tr>
                     </table>
 
-                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px;">■ 総合評価</h3>
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px; color: #333;">■ 総合評価</h3>
                     <div style="border: 2px solid {result_color}; padding: 15px; text-align: center; font-size: 22px; font-weight: bold; border-radius: 5px; color: {result_color}; letter-spacing: 5px; background-color: #fdfdfd;">
                         {result_text}
                     </div>
                     
-                    <div style="margin-top: 30px; font-size: 14px;">
+                    <div style="margin-top: 30px; font-size: 14px; color: #333;">
                         <b>特記事項・備考：</b><br>
-                        <div style="border: 1px solid #bbb; padding: 10px; min-height: 60px; background-color: #fdfdfd; margin-top: 5px; white-space: pre-wrap;">{latest_record.get('備考', '特になし')}</div>
+                        <div style="border: 1px solid #bbb; padding: 10px; min-height: 60px; background-color: #fdfdfd; margin-top: 5px; white-space: pre-wrap; color: #333;">{latest_record.get('備考', '特になし')}</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
