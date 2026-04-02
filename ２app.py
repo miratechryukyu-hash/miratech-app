@@ -42,7 +42,7 @@ if url_me_no:
 
 
 # ==========================================
-# 💡 アプリ本体のタブを「4つ」に増やしました！
+# 💡 アプリ本体
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "📄 レポート出力"])
 
@@ -143,7 +143,7 @@ with tab1:
             detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
 
         st.markdown("---")
-        inspector = st.text_input("実施者", value="安富")
+        inspector = st.text_input("実施者", value="安富 翔")
         result = st.radio("総合評価", ["使用可", "メーカー修理", "廃棄"], horizontal=True) 
         memo = st.text_area("備考・報告欄")
         
@@ -224,54 +224,89 @@ with tab3:
         st.error(f"データの読み込みに失敗しました: {e}")
 
 # ==========================================
-# 💡【大進化】タブ4：PDFレポート出力機能
+# 💡【大進化】タブ4：プロ仕様 PDFレポート出力機能
 # ==========================================
 with tab4:
-    st.subheader("📄 点検レポート・証明書の作成")
-    st.write("対象の機器を選ぶと、PDF印刷用のフォーマットが表示されます。")
+    st.subheader("📄 保守点検済証 の発行")
+    st.write("対象の機器を選ぶと、印刷・PDF保存用の公式フォーマットが表示されます。")
     
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(worksheet="シート1", ttl=0).dropna(how="all")
         
         if not df.empty and "ME No." in df.columns:
-            # 機器を選択
             target_me = st.selectbox("📝 出力する「ME No.」を選んでください", df["ME No."].unique())
             
             if target_me:
-                # その機器の最新データを取得
                 df_target = df[df["ME No."] == target_me]
                 latest_record = df_target.iloc[-1]
                 
+                # 判定結果によって色を変えるロジック
+                result_text = latest_record.get('判定', '-')
+                result_color = "#28a745" if result_text == "使用可" else "#dc3545"
+                exterior_text = latest_record.get('外装点検', '-')
+                exterior_color = "#28a745" if "異常なし" in exterior_text else "#dc3545"
+                
                 st.markdown("---")
-                # 印刷用の美しいフォーマット（HTML）
+                # 印刷用の美しいHTMLフォーマット（表形式で許容値も記載！）
                 st.markdown(f"""
-                <div style="border: 2px solid #555; padding: 30px; border-radius: 5px; background-color: #fff; color: #000; font-family: sans-serif;">
-                    <h2 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px;">医療機器 保守点検済証</h2>
-                    <br>
-                    <table style="width: 100%; font-size: 16px; line-height: 2.0;">
-                        <tr><td style="width: 30%;"><strong>点検日</strong></td><td>： {latest_record.get('点検日', '-')}</td></tr>
-                        <tr><td><strong>ME No.</strong></td><td>： {latest_record.get('ME No.', '-')}</td></tr>
-                        <tr><td><strong>製造番号 (S/N)</strong></td><td>： {latest_record.get('製造番号', '未登録')}</td></tr>
-                        <tr><td><strong>機種</strong></td><td>： {latest_record.get('機種', '-')}</td></tr>
-                        <tr><td><strong>総合評価</strong></td><td>： <b>{latest_record.get('判定', '-')}</b></td></tr>
+                <div style="font-family: sans-serif; color: #333; max-width: 800px; margin: 0 auto; padding: 30px; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.1); background-color: white;">
+                    
+                    <div style="text-align: right; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
+                        発行日： {date.today().strftime('%Y年%m月%d日')}<br>
+                        点検実施： <b>miratech Ryukyu</b><br>
+                        臨床工学技士： <b>{latest_record.get('実施者', '安富 翔')}</b>
+                    </div>
+                    
+                    <h2 style="text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 30px; letter-spacing: 2px; border-bottom: 2px solid #333; padding-bottom: 10px;">
+                        医療機器 保守点検済証
+                    </h2>
+                    
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 15px;">
+                        <tr>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left;">管理番号 (ME No.)</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%;"><b>{latest_record.get('ME No.', '-')}</b></td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; width: 20%; text-align: left;">点検日</th>
+                            <td style="border: 1px solid #bbb; padding: 10px; width: 30%;">{latest_record.get('点検日', '-')}</td>
+                        </tr>
+                        <tr>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left;">機種名</th>
+                            <td style="border: 1px solid #bbb; padding: 10px;">{latest_record.get('機種', '-')}</td>
+                            <th style="border: 1px solid #bbb; background-color: #f8f9fa; padding: 10px; text-align: left;">製造番号 (S/N)</th>
+                            <td style="border: 1px solid #bbb; padding: 10px;">{latest_record.get('製造番号', '未登録')}</td>
+                        </tr>
                     </table>
-                    <br>
-                    <h4 style="border-left: 5px solid #000; padding-left: 10px;">【詳細チェック結果】</h4>
-                    <p style="margin-bottom: 5px;"><strong>外装・警報チェック：</strong> {latest_record.get('外装点検', '-')}</p>
-                    <p style="margin-bottom: 5px;"><strong>精度チェック値：</strong> {latest_record.get('精度チェック', '-')}</p>
-                    <br>
-                    <p><strong>備考：</strong><br>{latest_record.get('備考', '-')}</p>
-                    <br><br>
-                    <p style="text-align: right; font-size: 18px; font-weight: bold;">実施者： {latest_record.get('実施者', '-')}</p>
-                    <p style="text-align: right; font-size: 14px; color: #555;">miratech 臨床工学技士</p>
+
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px;">■ 点検結果詳細</h3>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
+                        <tr style="background-color: #f8f9fa;">
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 30%;">点検項目</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: center; width: 35%;">判定 / 測定値</th>
+                            <th style="border: 1px solid #bbb; padding: 10px; text-align: left; width: 35%;">許容値・基準</th>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #bbb; padding: 10px;"><b>外観・作動・各種警報</b></td>
+                            <td style="border: 1px solid #bbb; padding: 10px; text-align: center; font-weight: bold; color: {exterior_color};">{exterior_text}</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; font-size: 12px; color: #555;">汚れ・破損なきこと<br>警報が正常に作動すること</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #bbb; padding: 10px;"><b>精度・数値チェック</b></td>
+                            <td style="border: 1px solid #bbb; padding: 10px; line-height: 1.6;">{latest_record.get('精度チェック', '-')}</td>
+                            <td style="border: 1px solid #bbb; padding: 10px; font-size: 12px; color: #555;">※当該機種のメーカー規定<br>および許容範囲内であること</td>
+                        </tr>
+                    </table>
+
+                    <h3 style="font-size: 18px; border-left: 5px solid #0056b3; padding-left: 10px; margin-bottom: 15px;">■ 総合評価</h3>
+                    <div style="border: 2px solid {result_color}; padding: 15px; text-align: center; font-size: 22px; font-weight: bold; border-radius: 5px; color: {result_color}; letter-spacing: 5px; background-color: #fdfdfd;">
+                        {result_text}
+                    </div>
+                    
+                    <div style="margin-top: 30px; font-size: 14px;">
+                        <b>特記事項・備考：</b><br>
+                        <div style="border: 1px solid #bbb; padding: 10px; min-height: 60px; background-color: #fdfdfd; margin-top: 5px; white-space: pre-wrap;">{latest_record.get('備考', '特になし')}</div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.info("💡 **PDFとして保存・印刷する方法**\n"
-                        "・**iPhone/iPad**: 画面下の「共有ボタン」から「プリント」を選びます。\n"
-                        "・**パソコン**: `Ctrl + P` (Macは `Command + P`) を押して、「PDFに保存」を選んでください。")
                 
         else:
             st.info("まだデータがありません。")
