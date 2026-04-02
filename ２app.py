@@ -2,8 +2,9 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import date
-import base64  # 💡【追加】新しいタブを作るための魔法の部品
+import base64
 
+# ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
 query_params = st.query_params
@@ -12,7 +13,7 @@ url_me_no = query_params.get("me_no", "")
 st.title("🏥 医療機器点検アプリ (miratech)")
 
 # ==========================================
-# 💡 QRダッシュボード
+# 💡 QRダッシュボード（QRから来た時だけ表示）
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
@@ -43,8 +44,9 @@ if url_me_no:
 
 
 # ==========================================
-# 💡 アプリ本体
+# 💡 アプリ本体メニュー（常に表示される）
 # ==========================================
+st.write("▼ メインメニュー ▼")
 tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "📄 レポート出力"])
 
 # ====== タブ1：入力画面 ======
@@ -224,9 +226,7 @@ with tab3:
     except Exception as e:
         st.error(f"データの読み込みに失敗しました: {e}")
 
-# ==========================================
-# 💡【大進化】タブ4：完全に独立した「印刷専用ページ」機能
-# ==========================================
+# ====== タブ4：プロ仕様 PDFレポート出力機能 ======
 with tab4:
     st.subheader("📄 保守点検済証 の発行")
     st.write("対象の機器を選ぶと、専用の印刷ページが開くボタンが表示されます。")
@@ -338,7 +338,6 @@ with tab4:
                 </html>
                 """
 
-                # HTMLをBase64に変換して、青くて大きなボタンを作る
                 b64 = base64.b64encode(html_template.encode('utf-8')).decode('utf-8')
                 href = f'''
                 <a href="data:text/html;base64,{b64}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #007bff; color: white; padding: 20px; font-size: 18px; text-decoration: none; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.3s;">
