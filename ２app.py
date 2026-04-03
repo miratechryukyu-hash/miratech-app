@@ -42,7 +42,7 @@ if not check_password():
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
-st.title("🏥 医療機器点検アプリ (miratech)")
+st.title("🏥 医療機器点検アプリ (うえむら病院専用)")
 # ...（以下略、今までのコードを続けてください）...
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
