@@ -2,6 +2,8 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import date
+import qrcode
+from io import BytesIO
 
 # ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
@@ -13,7 +15,7 @@ st.title("🏥 医療機器点検アプリ (miratech)")
 categories_list = ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"]
 
 # ==========================================
-# 💡 QRダッシュボード
+# 💡 QRダッシュボード（スマホのカメラで読み取った時に発動！）
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
@@ -53,9 +55,9 @@ if url_me_no:
 
 
 # ==========================================
-# 💡 アプリ本体メニュー
+# 💡 アプリ本体メニュー（4タブに進化）
 # ==========================================
-tab1, tab2, tab3 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴"])
+tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行"])
 
 # ====== タブ1：入力画面 ======
 with tab1:
@@ -86,7 +88,7 @@ with tab1:
         
         chk_es1=chk_es2=chk_es3=chk_es4=chk_es5=chk_es6 = False
         chk_as1=chk_as2=chk_as3=chk_as4=chk_as5 = False
-        chk_sop1=chk_sop2=chk_sop3 = False # 💡シリンジポンプ用の作動点検を追加
+        chk_sop1=chk_sop2=chk_sop3 = False 
         
         flow_acc=occ_press = 0.0
         bubble_ad_water=bubble_ad_nowater = 0
@@ -130,11 +132,6 @@ with tab1:
             with col_num2:
                 occ_press = st.number_input("閉塞検出圧 (kpa/mmHg)", value=50.0, step=1.0)
                 bubble_ad_nowater = st.number_input("気泡センサーAD値 (水無し)", value=5)
-                
-            ext_all_ok = all([chk_e1, chk_e2, chk_e3, chk_e4, chk_e5, chk_e6, chk_e7, chk_op1, chk_op2, chk_op3])
-            alm_all_ok = all([chk_a1, chk_a2, chk_a3, chk_a4])
-            exterior_result = "異常なし" if (ext_all_ok and alm_all_ok) else "異常あり"
-            detail_result = f"外観/警報:{'OK' if (ext_all_ok and alm_all_ok) else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}"
 
         elif device_category == "シリンジポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
@@ -149,7 +146,6 @@ with tab1:
                     chk_es5 = st.checkbox("AC・DC切り替え", value=True)
                     chk_es6 = st.checkbox("セルフチェック・LED", value=True)
                 
-                # 💡 シリンジポンプの作動点検を追加
                 st.write("**【その他の作動点検】**")
                 col7, col8 = st.columns(2)
                 with col7:
@@ -174,11 +170,6 @@ with tab1:
                 flow_acc = st.number_input("流量精度チェック (ml)", value=10.0, step=0.1)
             with col_num2_s:
                 occ_press = st.number_input("閉塞検出圧 (kpa)", value=80.0, step=1.0)
-                
-            ext_all_ok_s = all([chk_es1, chk_es2, chk_es3, chk_es4, chk_es5, chk_es6, chk_sop1, chk_sop2, chk_sop3])
-            alm_all_ok_s = all([chk_as1, chk_as2, chk_as3, chk_as4, chk_as5])
-            exterior_result = "異常なし" if (ext_all_ok_s and alm_all_ok_s) else "異常あり"
-            detail_result = f"外観/警報:{'OK' if (ext_all_ok_s and alm_all_ok_s) else 'NG'} | 流量:{flow_acc}ml, 閉塞:{occ_press}"
 
         else:
             exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
@@ -191,7 +182,6 @@ with tab1:
         
         submitted = st.form_submit_button("スプレッドシートに保存")
 
-    # ＝＝＝ 保存処理（選んだシートへ振り分け！） ＝＝＝
     if submitted:
         if not me_no:
             st.warning("⚠️ ME No.を入力してください")
@@ -257,9 +247,9 @@ with tab1:
                             "残量_閉塞警報": "〇" if chk_as3 else "×",
                             "開始忘れ_流量設定無し": "〇" if chk_as4 else "×",
                             "消音機能_再警報": "〇" if chk_as5 else "×",
-                            "積算クリア機能": "〇" if chk_sop1 else "×", # 💡追加
-                            "流量設定": "〇" if chk_sop2 else "×", # 💡追加
-                            "日付・時刻設定": "〇" if chk_sop3 else "×", # 💡追加
+                            "積算クリア機能": "〇" if chk_sop1 else "×",
+                            "流量設定": "〇" if chk_sop2 else "×",
+                            "日付・時刻設定": "〇" if chk_sop3 else "×",
                             "流量精度値": flow_acc,
                             "閉塞検出圧値": occ_press
                         })
@@ -314,3 +304,48 @@ with tab3:
             st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
     except Exception as e:
         st.info(f"スプレッドシートに「{view_cat_history}」シートを作成してください。")
+
+# ==========================================
+# 💡 タブ4：QRコード発行機能
+# ==========================================
+with tab4:
+    st.subheader("🔲 機器用QRコードの作成")
+    st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
+    
+    # URLのベースを手動で取得（Streamlit CloudのURLなど）
+    # 例: https://miratech-app.streamlit.app/
+    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="https://xxxx.streamlit.app/")
+    
+    target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: TE-381-001")
+    
+    if st.button("QRコードを作成する"):
+        if base_url and target_qr_me:
+            # ベースURLの末尾に「/?me_no=〇〇」をくっつける
+            if base_url.endswith("/"):
+                final_url = f"{base_url}?me_no={target_qr_me}"
+            else:
+                final_url = f"{base_url}/?me_no={target_qr_me}"
+            
+            # QRコードの画像を生成
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(final_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # 画像をStreamlit上で表示できるように変換
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            st.success(f"「{target_qr_me}」専用のQRコードができました！")
+            st.image(byte_im, width=200)
+            
+            # ダウンロードボタン
+            st.download_button(
+                label="📥 このQRコードを画像として保存",
+                data=byte_im,
+                file_name=f"QR_{target_qr_me}.png",
+                mime="image/png"
+            )
+        else:
+            st.warning("アプリのURLと、ME No.の両方を入力してください。")
