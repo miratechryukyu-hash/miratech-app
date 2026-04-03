@@ -8,6 +8,52 @@ from io import BytesIO
 # ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
+# ==========================================
+# 🔐 セキュリティ：パスワード認証ブロック
+# ==========================================
+def check_password():
+    """正しいパスワードが入力されるまでアプリをロックする"""
+    def password_entered():
+        # 👇 ここがパスワードです（好きな文字に変更してください）
+        if st.session_state["password"] == "miratech2026": 
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.warning("⚠️ このシステムはmiratech琉球の専用システムです。")
+        st.text_input("🔑 パスワードを入力してください", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("🔑 パスワードを入力してください", type="password", on_change=password_entered, key="password")
+        st.error("❌ パスワードが違います。不正アクセスのログを記録しました。")
+        return False
+    return True
+
+# もしパスワードが間違っていたら、ここでプログラムの動きを完全に止める（絶対に下へ進ませない）
+if not check_password():
+    st.stop()
+
+# ==========================================
+# ここから下は、今までのコード（QRダッシュボードやタブメニューなど）をそのまま残す
+# ==========================================
+
+query_params = st.query_params
+url_me_no = query_params.get("me_no", "")
+
+st.title("🏥 医療機器点検アプリ (miratech)")
+# ...（以下略、今までのコードを続けてください）...
+import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
+from datetime import date
+import qrcode
+from io import BytesIO
+
+# ページ設定
+st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
+
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
