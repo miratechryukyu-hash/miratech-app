@@ -15,7 +15,7 @@ def check_password():
     """正しいパスワードが入力されるまでアプリをロックする"""
     def password_entered():
         # 👇 ここがパスワードです（好きな文字に変更してください）
-        if st.session_state["password"] == "miratech2026": 
+        if st.session_state["password"] == "4011": 
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
         else:
@@ -57,7 +57,6 @@ st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
-st.title("🏥 医療機器点検アプリ (miratech)")
 categories_list = ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"]
 
 # ==========================================
