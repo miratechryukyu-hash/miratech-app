@@ -14,7 +14,7 @@ st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 def check_password():
     """正しいパスワードが入力されるまでアプリをロックする"""
     def password_entered():
-        # 👇 ここがパスワードです（好きな文字に変更してください）
+        # 👇 ここがパスワードです
         if st.session_state["password"] == "4011": 
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
@@ -31,36 +31,21 @@ def check_password():
         return False
     return True
 
-# もしパスワードが間違っていたら、ここでプログラムの動きを完全に止める（絶対に下へ進ませない）
+# もしパスワードが間違っていたら、ここでプログラムの動きを完全に止める
 if not check_password():
     st.stop()
 
 # ==========================================
-# ここから下は、今までのコード（QRダッシュボードやタブメニューなど）をそのまま残す
+# 💡 アプリ本体
 # ==========================================
-
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
 st.title("🏥 医療機器点検アプリ (うえむら病院専用)")
-# ...（以下略、今までのコードを続けてください）...
-import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-import pandas as pd
-from datetime import date
-import qrcode
-from io import BytesIO
-
-# ページ設定
-st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
-
-query_params = st.query_params
-url_me_no = query_params.get("me_no", "")
-
 categories_list = ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"]
 
 # ==========================================
-# 💡 QRダッシュボード（スマホのカメラで読み取った時に発動！）
+# 💡 QRダッシュボード（画像・マニュアル表示対応版）
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
@@ -74,18 +59,34 @@ if url_me_no:
                     df_device = df_cat[df_cat["ME No."].astype(str) == url_me_no]
                     if not df_device.empty:
                         latest_data = df_device.iloc[-1]
-                        dash_tab1, dash_tab2 = st.tabs(["🏥 機器の基本情報", "📝 過去の点検履歴"])
-                        with dash_tab1:
-                            st.write(f"### 📊 機器マスターデータ ({cat})")
-                            col1, col2 = st.columns(2)
-                            col1.metric("ME No.", str(latest_data.get("ME No.", "-")))
-                            col2.metric("機種", str(latest_data.get("機種", "-")))
-                            col3, col4 = st.columns(2)
-                            col3.metric("製造番号 (S/N)", str(latest_data.get("製造番号", "未登録")))
-                            col4.metric("これまでの点検回数", f"{len(df_device)} 回")
-                        with dash_tab2:
-                            st.write("### 🩺 最新＆過去の点検ステータス")
+                        
+                        # ✨【新機能】写真と添付文書の表示
+                        col_img, col_info = st.columns([1, 1])
+                        
+                        with col_img:
+                            # スプレッドシートに「写真URL」列があり、値が入っている場合
+                            pic_url = latest_data.get("写真URL", "")
+                            if pd.notnull(pic_url) and str(pic_url).startswith("http"):
+                                st.image(pic_url, caption=f"{url_me_no} の外観", use_container_width=True)
+                            else:
+                                st.info("📸 写真は未登録です")
+
+                        with col_info:
+                            st.write(f"### 📊 基本情報 ({cat})")
+                            st.write(f"**機種:** {latest_data.get('機種', '-')}")
+                            st.write(f"**S/N:** {latest_data.get('製造番号', '-')}")
+                            
+                            # ✨【新機能】添付文書ボタン
+                            doc_url = latest_data.get("添付文書URL", "")
+                            if pd.notnull(doc_url) and str(doc_url).startswith("http"):
+                                st.link_button("📖 添付文書・使い方を見る", doc_url, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        # 過去履歴の表示
+                        with st.expander("📝 過去の点検履歴を確認する"):
                             st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
+                        
                         device_found = True
                         break
             except Exception:
@@ -100,7 +101,7 @@ if url_me_no:
 
 
 # ==========================================
-# 💡 アプリ本体メニュー（4タブに進化）
+# 💡 アプリ本体メニュー（4タブ）
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行"])
 
@@ -357,27 +358,21 @@ with tab4:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
-    # URLのベースを手動で取得（Streamlit CloudのURLなど）
-    # 例: https://miratech-app.streamlit.app/
     base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="https://xxxx.streamlit.app/")
-    
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: TE-381-001")
     
     if st.button("QRコードを作成する"):
         if base_url and target_qr_me:
-            # ベースURLの末尾に「/?me_no=〇〇」をくっつける
             if base_url.endswith("/"):
                 final_url = f"{base_url}?me_no={target_qr_me}"
             else:
                 final_url = f"{base_url}/?me_no={target_qr_me}"
             
-            # QRコードの画像を生成
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
             qr.add_data(final_url)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
             
-            # 画像をStreamlit上で表示できるように変換
             buf = BytesIO()
             img.save(buf, format="PNG")
             byte_im = buf.getvalue()
@@ -385,7 +380,6 @@ with tab4:
             st.success(f"「{target_qr_me}」専用のQRコードができました！")
             st.image(byte_im, width=200)
             
-            # ダウンロードボタン
             st.download_button(
                 label="📥 このQRコードを画像として保存",
                 data=byte_im,
