@@ -15,7 +15,7 @@ def check_password():
     """正しいパスワードが入力されるまでアプリをロックする"""
     def password_entered():
         # 👇 ここがパスワードです
-        if st.session_state["password"] == "4011": 
+        if password == st.secrets["app_password"]:
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
         else:
