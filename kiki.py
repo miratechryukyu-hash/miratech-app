@@ -14,8 +14,8 @@ st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 def check_password():
     """正しいパスワードが入力されるまでアプリをロックする"""
     def password_entered():
-        # 👇 ここがパスワードです
-        if password == st.secrets["app_password"]:
+        # 👇 【修正箇所】st.session_state["password"] に変更しました！
+        if st.session_state["password"] == st.secrets["app_password"]:
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
         else:
