@@ -358,7 +358,7 @@ with tab4:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
-    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="https://xxxx.streamlit.app/")
+    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="https://miratechryukyu-hash-miratech-app-kiki-nnm67c.streamlit.app")
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: TE-381-001")
     
     if st.button("QRコードを作成する"):
