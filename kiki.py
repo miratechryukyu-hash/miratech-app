@@ -14,26 +14,6 @@ import streamlit as st
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
 # ==========================================
-# ✨ 【追加】上の余白（パディング）を詰めるカスタムCSS
-# ==========================================
-st.markdown(
-    """
-    <style>
-        /* メインコンテンツの上部余白をゼロにする */
-        .block-container {
-            padding-top: 0rem;
-            padding-bottom: 0rem;
-        }
-        /* ヘッダー（黒い帯）自体の高さを少し低くする（オプション） */
-        header {
-            visibility: hidden; /* ヘッダー自体を非表示にしてさらに詰める */
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ==========================================
 # 🔐 セキュリティ：パスワード認証ブロック
 # ==========================================
 def check_password():
