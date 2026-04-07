@@ -385,7 +385,7 @@ with tab1:
                             "閉塞検出圧値": occ_press
                         })
                     elif device_category == "保育器":
-                        data_dict["タイプ"] = incubator_type
+                       # data_dict["タイプ"] = incubator_type
                         if "閉鎖式" in incubator_type:
                             for k, v in inc_c_checks.items():
                                 data_dict[f"閉鎖_{k}"] = "〇" if v else "×"
