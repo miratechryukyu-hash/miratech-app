@@ -106,12 +106,21 @@ if url_me_no:
 tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行"])
 
 # ====== タブ1：入力画面 ======
+# ====== タブ1：入力画面 ======
 with tab1:
     device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
+    
+    # 💡 機器ごとの型式選択
     if device_category == "輸液ポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
     elif device_category == "シリンジポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
+    elif device_category == "保育器":
+        incubator_type = st.radio("▼ 保育器のタイプ", ["閉鎖式 (V-2100G・V85など)", "開放型 (V-505・103HEなど)"])
+        if "閉鎖式" in incubator_type:
+            device_model = st.selectbox("▼ 型式", ["V-2100G", "V85", "その他"])
+        else:
+            device_model = st.selectbox("▼ 型式", ["V-505", "103HE", "その他"])
     else:
         device_model = st.text_input("▼ 型式を入力してください")
     
@@ -127,18 +136,24 @@ with tab1:
         serial_no = st.text_input("製造番号 (S/N)", placeholder="例: 12345678")
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
-        # 変数を初期化
+        # 変数を初期化（既存機器用）
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
         chk_op1=chk_op2=chk_op3 = False
-        
         chk_es1=chk_es2=chk_es3=chk_es4=chk_es5=chk_es6 = False
         chk_as1=chk_as2=chk_as3=chk_as4=chk_as5 = False
         chk_sop1=chk_sop2=chk_sop3 = False 
-        
         flow_acc=occ_press = 0.0
         bubble_ad_water=bubble_ad_nowater = 0
         
+        # 変数を初期化（保育器用）
+        inc_c_checks = {}
+        inc_o_checks = {}
+        inc_temp_disp = inc_temp_meas = 36.0
+
+        # ==================================
+        # 💡 各機器のチェック項目表示
+        # ==================================
         if device_category == "輸液ポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -217,6 +232,72 @@ with tab1:
             with col_num2_s:
                 occ_press = st.number_input("閉塞検出圧 (kpa)", value=80.0, step=1.0)
 
+        elif device_category == "保育器":
+            if "閉鎖式" in incubator_type:
+                with st.expander("🔍 閉鎖式保育器 点検項目", expanded=True):
+                    st.write("**① 外観点検**")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        inc_c_checks["本体・フード破損なし"] = st.checkbox("本体・パネル・フード等に破損なし", value=True)
+                        inc_c_checks["キャスター動作"] = st.checkbox("キャスター・ストッパー動作", value=True)
+                        inc_c_checks["手入れ窓パッキン"] = st.checkbox("手入れ窓・パッキン破損なし", value=True)
+                        inc_c_checks["ホース破損なし"] = st.checkbox("ホースアッセンブリ破損なし", value=True)
+                    with c2:
+                        inc_c_checks["フィルター状態"] = st.checkbox("フィルター汚れなし・期限内", value=True)
+                        inc_c_checks["電源コード・プラグ"] = st.checkbox("電源・プラグ・アースピン破損なし", value=True)
+                        inc_c_checks["センサー破損なし"] = st.checkbox("各種センサー・接続部破損なし", value=True)
+
+                    st.write("**② 作動・機能点検**")
+                    c3, c4 = st.columns(2)
+                    with c3:
+                        inc_c_checks["傾斜装置"] = st.checkbox("傾斜装置スムーズ動作", value=True)
+                        inc_c_checks["ファン作動"] = st.checkbox("ファン確実作動・破損なし", value=True)
+                    with c4:
+                        inc_c_checks["加湿警報"] = st.checkbox("低水位・水槽外れ警報作動", value=True)
+                        inc_c_checks["SpO2表示"] = st.checkbox("SpO2表示・測定(対応機のみ)", value=True)
+
+                    st.write("**③ 温度制御 (設定 36.0±1℃)**")
+                    c5, c6 = st.columns(2)
+                    with c5:
+                        inc_temp_disp = st.number_input("表示値 (℃)", value=36.0, step=0.1)
+                    with c6:
+                        inc_temp_meas = st.number_input("測定値 (℃)", value=36.0, step=0.1)
+
+            else: # 開放型 (インファントウォーマ)
+                with st.expander("🔍 開放型保育器 点検項目", expanded=True):
+                    st.write("**① コントロール・作動・表示点検**")
+                    o1, o2 = st.columns(2)
+                    with o1:
+                        inc_o_checks["電源・照明スイッチ"] = st.checkbox("電源・照明灯スイッチ異常なし", value=True)
+                        inc_o_checks["表示・キー操作"] = st.checkbox("表示部・キー操作異常なし", value=True)
+                        inc_o_checks["温度制御(マニュアル)"] = st.checkbox("マニュアルコントロール動作", value=True)
+                        inc_o_checks["温度制御(サーボ)"] = st.checkbox("体温プローブ・サーボ動作", value=True)
+                    with o2:
+                        inc_o_checks["SpO2表示"] = st.checkbox("SpO2・HR表示測定が可能か", value=True)
+                        inc_o_checks["タイマー表示"] = st.checkbox("タイマー機能・表示動作", value=True)
+
+                    st.write("**② 各種警報機能**")
+                    o3, o4 = st.columns(2)
+                    with o3:
+                        inc_o_checks["チェックスイッチ"] = st.checkbox("チェックスイッチ作動", value=True)
+                        inc_o_checks["設定温度警報(マニュアル)"] = st.checkbox("設定温度警報(マニュアル)", value=True)
+                        inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
+                    with o4:
+                        inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
+                        inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
+                        inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
+
+                    st.write("**③ 蘇生装置・酸素・外装**")
+                    o5, o6 = st.columns(2)
+                    with o5:
+                        inc_o_checks["蘇生装置"] = st.checkbox("蘇生装置の機能点検・異常なし", value=True)
+                        inc_o_checks["酸素ブレンダ作動"] = st.checkbox("酸素ブレンダ作動確認", value=True)
+                        inc_o_checks["供給ガス警報"] = st.checkbox("供給ガス警報が発生するか", value=True)
+                    with o6:
+                        inc_o_checks["吸引・流量計"] = st.checkbox("吸引ユニット・酸素流量計正常", value=True)
+                        inc_o_checks["外装・キャノピ・ネジ類"] = st.checkbox("支柱・キャノピ・反射板・ネジ等", value=True)
+                        inc_o_checks["電源・ジャック・ガード"] = st.checkbox("電源コード・各種ジャック・ガード", value=True)
+
         else:
             exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
             detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
@@ -228,6 +309,9 @@ with tab1:
         
         submitted = st.form_submit_button("スプレッドシートに保存")
 
+    # ==================================
+    # 💾 データ保存の処理
+    # ==================================
     if submitted:
         if not me_no:
             st.warning("⚠️ ME No.を入力してください")
@@ -249,6 +333,7 @@ with tab1:
                     st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！")
                 else:
                     combined_model = f"{device_category} ({device_model})"
+                    # 基本データ
                     data_dict = {
                         "点検日": str(check_date),
                         "ME No.": me_no,
@@ -259,6 +344,7 @@ with tab1:
                         "備考": memo
                     }
                     
+                    # 機器別データの結合
                     if device_category == "輸液ポンプ":
                         data_dict.update({
                             "本体の汚れ・破損": "〇" if chk_e1 else "×",
@@ -299,6 +385,16 @@ with tab1:
                             "流量精度値": flow_acc,
                             "閉塞検出圧値": occ_press
                         })
+                    elif device_category == "保育器":
+                        data_dict["タイプ"] = incubator_type
+                        if "閉鎖式" in incubator_type:
+                            for k, v in inc_c_checks.items():
+                                data_dict[f"[閉鎖] {k}"] = "〇" if v else "×"
+                            data_dict["[閉鎖] 表示値(℃)"] = inc_temp_disp
+                            data_dict["[閉鎖] 測定値(℃)"] = inc_temp_meas
+                        else:
+                            for k, v in inc_o_checks.items():
+                                data_dict[f"[開放] {k}"] = "〇" if v else "×"
 
                     new_data = pd.DataFrame([data_dict])
                     updated_df = pd.concat([existing_data, new_data], ignore_index=True)
@@ -309,7 +405,6 @@ with tab1:
                     st.success(f"大成功！{me_no} のデータを「{target_sheet}」シートに記録しました！")
             except Exception as e:
                 st.error(f"エラー発生: スプレッドシートに「{target_sheet}」という名前のシートが作られているか確認してください。詳細: {e}")
-
 # ====== タブ2：マスター ======
 with tab2:
     st.subheader("🏥 機器マスター")
