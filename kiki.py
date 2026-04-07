@@ -7,11 +7,6 @@ from io import BytesIO
 
 # ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
-import streamlit as st
-# (元からあるimport文...)
-
-# ページ設定
-st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 
 # ==========================================
 # 🔐 セキュリティ：パスワード認証ブロック
@@ -19,7 +14,6 @@ st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
 def check_password():
     """正しいパスワードが入力されるまでアプリをロックする"""
     def password_entered():
-        # 👇 【修正箇所】st.session_state["password"] に変更しました！
         if st.session_state["password"] == st.secrets["app_password"]:
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
@@ -48,7 +42,7 @@ url_me_no = query_params.get("me_no", "")
 
 st.title("うえむら病院専用")
 st.title("医療機器点検アプリ")
-categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置" , "人工呼吸器" , "その他"]
+categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
 
 # ==========================================
 # 💡 QRダッシュボード（画像・マニュアル表示対応版）
@@ -111,7 +105,6 @@ if url_me_no:
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行"])
 
-# ====== タブ1：入力画面 ======
 # ====== タブ1：入力画面 ======
 with tab1:
     device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
@@ -395,12 +388,12 @@ with tab1:
                         data_dict["タイプ"] = incubator_type
                         if "閉鎖式" in incubator_type:
                             for k, v in inc_c_checks.items():
-                                data_dict[f"[閉鎖] {k}"] = "〇" if v else "×"
-                            data_dict["[閉鎖] 表示値(℃)"] = inc_temp_disp
-                            data_dict["[閉鎖] 測定値(℃)"] = inc_temp_meas
+                                data_dict[f"閉鎖_{k}"] = "〇" if v else "×"
+                            data_dict["閉鎖_表示値(℃)"] = inc_temp_disp
+                            data_dict["閉鎖_測定値(℃)"] = inc_temp_meas
                         else:
                             for k, v in inc_o_checks.items():
-                                data_dict[f"[開放] {k}"] = "〇" if v else "×"
+                                data_dict[f"開放_{k}"] = "〇" if v else "×"
 
                     new_data = pd.DataFrame([data_dict])
                     updated_df = pd.concat([existing_data, new_data], ignore_index=True)
@@ -411,6 +404,7 @@ with tab1:
                     st.success(f"大成功！{me_no} のデータを「{target_sheet}」シートに記録しました！")
             except Exception as e:
                 st.error(f"エラー発生: スプレッドシートに「{target_sheet}」という名前のシートが作られているか確認してください。詳細: {e}")
+
 # ====== タブ2：マスター ======
 with tab2:
     st.subheader("🏥 機器マスター")
