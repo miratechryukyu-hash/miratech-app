@@ -388,12 +388,12 @@ with tab1:
                        # data_dict["タイプ"] = incubator_type
                         if "閉鎖式" in incubator_type:
                             for k, v in inc_c_checks.items():
-                                data_dict[f"閉鎖_{k}"] = "〇" if v else "×"
-                            data_dict["閉鎖_表示値(℃)"] = inc_temp_disp
-                            data_dict["閉鎖_測定値(℃)"] = inc_temp_meas
+                                data_dict[k] = "〇" if v else "×"
+                            data_dict["表示値(℃)"] = inc_temp_disp
+                            data_dict["測定値(℃)"] = inc_temp_meas
                         else:
                             for k, v in inc_o_checks.items():
-                                data_dict[f"開放_{k}"] = "〇" if v else "×"
+                                data_dict[k] = "〇" if v else "×"
 
                     new_data = pd.DataFrame([data_dict])
                     updated_df = pd.concat([existing_data, new_data], ignore_index=True)
