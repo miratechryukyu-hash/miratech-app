@@ -41,8 +41,8 @@ if not check_password():
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 
-st.title("🏥 医療機器点検アプリ (うえむら病院専用)")
-categories_list = ["輸液ポンプ", "シリンジポンプ", "人工呼吸器", "その他"]
+st.title("🏥 医療機器点検アプリ     (うえむら病院専用)")
+categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置" , "人工呼吸器" , "その他"]
 
 # ==========================================
 # 💡 QRダッシュボード（画像・マニュアル表示対応版）
