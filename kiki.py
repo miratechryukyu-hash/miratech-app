@@ -128,12 +128,8 @@ with tab1:
         if img_file and ai_model:
             with st.spinner("AIが文字を解析しています..."):
 try:
-                    # ✨ 画像データをAIが確実に読める「生データ（バイト形式）」に変換
-                    img_bytes = img_file.getvalue()
-                    img_dict = {
-                        "mime_type": "image/jpeg",
-                        "data": img_bytes
-                    }
+                    # ✨ 画像を開き、AIが確実に読める標準カラー（RGB）に変換！
+                    img = Image.open(img_file).convert('RGB')
                     
                     prompt = """
                     この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
@@ -143,8 +139,8 @@ try:
                     - manufacture_year (製造年。例: 2018)
                     """
                     
-                    # ✨ img ではなく img_dict をAIに渡す
-                    response = ai_model.generate_content([prompt, img_dict])
+                    # ✨ 余計な変換はせず、シンプルに img をそのままAIに渡す
+                    response = ai_model.generate_content([prompt, img])
                     
                     # JSON部分だけを抽出
                     json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
