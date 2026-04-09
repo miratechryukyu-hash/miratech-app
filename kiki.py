@@ -128,9 +128,12 @@ with tab1:
         if img_file and ai_model:
             with st.spinner("AIが文字を解析しています..."):
 try:
-                    # ✨ 画像を開き、AIが確実に読める標準形式に変換
-                    img = Image.open(img_file).convert('RGB')
-
+                    # ✨ Streamlitのカメラデータ（PNG）を、正直に「PNG」としてそのままAIに渡す最強の方法
+                    image_part = {
+                        "mime_type": "image/png",
+                        "data": img_file.getvalue()
+                    }
+                    
                     prompt = """
                     この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
                     キーは以下のようにしてください:
@@ -138,10 +141,10 @@ try:
                     - serial_number (製造番号/SN)
                     - manufacture_year (製造年。例: 2018)
                     """
-
-                    # ✨ 画像とプロンプトをそのままAIに渡す
-                    response = ai_model.generate_content([prompt, img])
-
+                    
+                    # ✨ 変換済みのデータを渡す
+                    response = ai_model.generate_content([prompt, image_part])
+                    
                     # JSON部分だけを抽出
                     json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
                     if json_match:
