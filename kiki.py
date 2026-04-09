@@ -4,10 +4,10 @@ import pandas as pd
 from datetime import date
 import qrcode
 from io import BytesIO
-import google.generativeai as genai  # ✨AI用に追加
-from PIL import Image                # ✨画像処理用に追加
-import json                          # ✨データ処理用に追加
-import re                            # ✨データ抽出用に追加
+import google.generativeai as genai  
+from PIL import Image                
+import json                          
+import re                            
 
 # ページ設定
 st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
@@ -127,19 +127,10 @@ with tab1:
         
         if img_file and ai_model:
             with st.spinner("AIが文字を解析しています..."):
-try:
-                    # ✨ 新しい部品（ファイル保存用）をここで呼び出します
-                    import tempfile
-                    import os
-
-                    # ✨ ① カメラの画像を、一度サーバーの裏側に「一時ファイル」として保存する
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
-                        tmp_file.write(img_file.getvalue())
-                        tmp_file_path = tmp_file.name
+                try:
+                    # ✨ 公式の最も安全でシンプルな読み込み方
+                    img = Image.open(img_file)
                     
-                    # ✨ ② 保存した画像を、Gemini公式の「ファイルアップロード機能」で安全に渡す
-                    uploaded_img = ai_model.upload_file(tmp_file_path) if hasattr(ai_model, 'upload_file') else genai.upload_file(tmp_file_path)
-
                     prompt = """
                     この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
                     キーは以下のようにしてください:
@@ -148,13 +139,8 @@ try:
                     - manufacture_year (製造年。例: 2018)
                     """
                     
-                    # ✨ ③ アップロード済みの画像データをAIに読み込ませる（これで絶対にエラーは起きません！）
-                    response = ai_model.generate_content([prompt, uploaded_img])
+                    response = ai_model.generate_content([prompt, img])
                     
-                    # ✨ ④ 読み取りが終わったら、一時ファイルを削除して綺麗にする
-                    os.remove(tmp_file_path)
-
-                    # JSON部分（データ）だけを抽出
                     json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
                     if json_match:
                         data = json.loads(json_match.group())
@@ -166,8 +152,8 @@ try:
                         st.warning("情報が見つかりませんでした。少し近づいて撮り直してみてください。")
                         
                 except Exception as e:
-                    st.error(f"AI解析エラー: {e}")       
-elif not ai_model:
+                    st.error(f"AI解析エラー: {e}")
+        elif not ai_model:
             st.warning("APIキーが設定されていないため、AI機能は使えません。")
 
     st.markdown("---")
