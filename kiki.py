@@ -34,7 +34,6 @@ def check_password():
         return False
     return True
 
-# もしパスワードが間違っていたら、ここでプログラムの動きを完全に止める
 if not check_password():
     st.stop()
 
@@ -47,9 +46,7 @@ if "GEMINI_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         ai_model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
-        st.error(f"APIキーの設定でエラーが起きました: {e}")
-else:
-    st.warning("⚠️ Streamlitの金庫（Secrets）に GEMINI_API_KEY が設定されていません！")
+        st.error(f"APIキーの設定エラー: {e}")
 
 # ==========================================
 # 💡 アプリ本体
@@ -77,11 +74,9 @@ if url_me_no:
                     if not df_device.empty:
                         latest_data = df_device.iloc[-1]
                         
-                        # ✨【新機能】写真と添付文書の表示
                         col_img, col_info = st.columns([1, 1])
                         
                         with col_img:
-                            # スプレッドシートに「写真URL」列があり、値が入っている場合
                             pic_url = latest_data.get("写真URL", "")
                             if pd.notnull(pic_url) and str(pic_url).startswith("http"):
                                 st.image(pic_url, caption=f"{url_me_no} の外観", use_container_width=True)
@@ -92,16 +87,14 @@ if url_me_no:
                             st.write(f"### 📊 基本情報 ({cat})")
                             st.write(f"**機種:** {latest_data.get('機種', '-')}")
                             st.write(f"**S/N:** {latest_data.get('製造番号', '-')}")
-                            st.write(f"**製造年:** {latest_data.get('製造年', '-')}") # ✨表示追加
+                            st.write(f"**製造年:** {latest_data.get('製造年', '-')}")
                             
-                            # ✨【新機能】添付文書ボタン
                             doc_url = latest_data.get("添付文書URL", "")
                             if pd.notnull(doc_url) and str(doc_url).startswith("http"):
                                 st.link_button("📖 添付文書・使い方を見る", doc_url, use_container_width=True)
                         
                         st.markdown("---")
                         
-                        # 過去履歴の表示
                         with st.expander("📝 過去の点検履歴を確認する"):
                             st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
                         
@@ -118,64 +111,15 @@ if url_me_no:
     st.markdown("---")
 
 # ==========================================
-# 💡 アプリ本体メニュー（4タブ）
+# 💡 アプリ本体メニュー（✨タブを5つに変更！）
 # ==========================================
-tab1, tab2, tab3, tab4 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
 # ====== タブ1：入力画面 ======
 with tab1:
-    st.subheader("📸 AI銘板スキャナー")
-    
-    # ✨ AIの準備ができているか、分かりやすく画面でお知らせします！
-    if ai_model is None:
-        st.error("❌ AIの準備ができていません。APIキーを確認してください。")
-    else:
-        st.success("🤖 AI準備完了！銘板を撮影してください。")
-
-    with st.expander("カメラを起動して製造番号を読み取る", expanded=True):
-        img_file = st.camera_input("機器の銘板（シール）を撮影してください")
-        
-        if img_file:
-            if ai_model:
-                with st.spinner("AIが文字を解析しています（約10秒お待ちください）..."):
-                    try:
-                        # ✨ これが最強の回避策！画像をAIが大好きなJPEGに完全に書き換えてから渡す
-                        img = Image.open(img_file).convert('RGB')
-                        buf = BytesIO()
-                        img.save(buf, format="JPEG")
-                        buf.seek(0)
-                        jpeg_img = Image.open(buf)
-                        
-                        prompt = """
-                        この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
-                        キーは以下のようにしてください:
-                        - model (型式)
-                        - serial_number (製造番号/SN)
-                        - manufacture_year (製造年。例: 2018)
-                        """
-                        
-                        response = ai_model.generate_content([prompt, jpeg_img])
-                        
-                        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-                        if json_match:
-                            data = json.loads(json_match.group())
-                            st.session_state["scan_sn"] = data.get("serial_number", "")
-                            st.session_state["scan_model"] = data.get("model", "")
-                            st.session_state["scan_year"] = data.get("manufacture_year", "")
-                            st.success("✅ 読み取り大成功！下の入力欄にセットしました！")
-                        else:
-                            st.warning(f"文字が見つかりませんでした。AIの回答: {response.text}")
-                            
-                    except Exception as e:
-                        st.error(f"🚨 エラーの正体: {e}")
-            else:
-                st.error("AIが起動していないため、読み取りできません。")
-
-    st.markdown("---")
-    
     device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
     
-    # ✨ AIが読み取った型式があれば表示する
+    # ✨ タブ5（AIスキャン）で読み取った型式があれば表示する
     scan_model = st.session_state.get("scan_model", "")
     if scan_model:
         st.info(f"💡 AIが読み取った型式: **{scan_model}** （合っているか確認し、下で選択してください）")
@@ -203,12 +147,11 @@ with tab1:
         with col_form2:
             me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
-        # ✨ 読み取ったS/Nを初期値としてセット
+        # ✨ タブ5で読み取ったS/Nを初期値としてセット
         default_sn = st.session_state.get("scan_sn", "")
         serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
-        # 変数を初期化（既存機器用）
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
         chk_op1=chk_op2=chk_op3 = False
@@ -217,15 +160,10 @@ with tab1:
         chk_sop1=chk_sop2=chk_sop3 = False 
         flow_acc=occ_press = 0.0
         bubble_ad_water=bubble_ad_nowater = 0
-        
-        # 変数を初期化（保育器用）
         inc_c_checks = {}
         inc_o_checks = {}
         inc_temp_disp = inc_temp_meas = 36.0
 
-        # ==================================
-        # 💡 各機器のチェック項目表示
-        # ==================================
         if device_category == "輸液ポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -335,7 +273,7 @@ with tab1:
                     with c6:
                         inc_temp_meas = st.number_input("測定値 (℃)", value=36.0, step=0.1)
 
-            else: # 開放型 (インファントウォーマ)
+            else:
                 with st.expander("🔍 開放型保育器 点検項目", expanded=True):
                     st.write("**① コントロール・作動・表示点検**")
                     o1, o2 = st.columns(2)
@@ -351,7 +289,7 @@ with tab1:
                     st.write("**② 各種警報機能**")
                     o3, o4 = st.columns(2)
                     with o3:
-                        inc_o_checks["チェックスイッチ"] = st.checkbox("チェックスイッチ作作動", value=True)
+                        inc_o_checks["チェックスイッチ"] = st.checkbox("チェックスイッチ作動", value=True)
                         inc_o_checks["設定温度警報(マニュアル)"] = st.checkbox("設定温度警報(マニュアル)", value=True)
                         inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                     with o4:
@@ -381,9 +319,6 @@ with tab1:
         
         submitted = st.form_submit_button("スプレッドシートに保存")
 
-    # ==================================
-    # 💾 データ保存の処理
-    # ==================================
     if submitted:
         if not me_no:
             st.warning("⚠️ ME No.を入力してください")
@@ -405,19 +340,17 @@ with tab1:
                     st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！")
                 else:
                     combined_model = f"{device_category} ({device_model})"
-                    # 基本データ
                     data_dict = {
                         "点検日": str(check_date),
                         "ME No.": me_no,
                         "製造番号": serial_no,
-                        "製造年": st.session_state.get("scan_year", ""), 
+                        "製造年": st.session_state.get("scan_year", ""),
                         "機種": combined_model,
                         "実施者": inspector,
                         "判定": result,
                         "備考": memo
                     }
                     
-                    # 機器別データの結合
                     if device_category == "輸液ポンプ":
                         data_dict.update({
                             "本体の汚れ・破損": "〇" if chk_e1 else "×",
@@ -476,7 +409,7 @@ with tab1:
                     st.balloons()
                     st.success(f"大成功！{me_no} のデータを「{target_sheet}」シートに記録しました！")
             except Exception as e:
-                st.error(f"エラー発生: スプレッドシートに「{target_sheet}」という名前のシートが作られているか確認してください。詳細: {e}")
+                st.error(f"エラー発生: スプレッドシート確認エラー。詳細: {e}")
 
 # ====== タブ2：マスター ======
 with tab2:
@@ -519,9 +452,7 @@ with tab3:
     except Exception as e:
         st.info(f"スプレッドシートに「{view_cat_history}」シートを作成してください。")
 
-# ==========================================
-# 💡 タブ4：QRコード発行機能
-# ==========================================
+# ====== タブ4：QRコード発行機能 ======
 with tab4:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
@@ -556,3 +487,53 @@ with tab4:
             )
         else:
             st.warning("アプリのURLと、ME No.の両方を入力してください。")
+
+# ==========================================
+# ✨ タブ5：AI新規登録ダッシュボード
+# ==========================================
+with tab5:
+    st.subheader("📸 AI銘板スキャナー (新規登録用)")
+    st.write("新しい機器の銘板を撮影すると、情報を読み取って「点検入力」タブに自動転送します。")
+    
+    if ai_model is None:
+        st.error("❌ APIキーが設定されていないか、ライブラリのバージョンが古いです。")
+    else:
+        img_file = st.camera_input("銘板（シール）を撮影してください", key="ai_camera")
+        
+        if img_file:
+            with st.spinner("AIが文字を解析しています（約10秒）..."):
+                try:
+                    # 公式の最もシンプルで安全な画像処理
+                    img = Image.open(img_file)
+                    
+                    prompt = """
+                    この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
+                    キーは以下のようにしてください:
+                    - model (型式)
+                    - serial_number (製造番号/SN)
+                    - manufacture_year (製造年。例: 2018)
+                    """
+                    
+                    response = ai_model.generate_content([prompt, img])
+                    
+                    json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                    if json_match:
+                        data = json.loads(json_match.group())
+                        
+                        # 画面に結果を表示
+                        st.success("✅ 読み取り成功！")
+                        st.write(f"**型式:** {data.get('model', '見つかりませんでした')}")
+                        st.write(f"**製造番号:** {data.get('serial_number', '見つかりませんでした')}")
+                        st.write(f"**製造年:** {data.get('manufacture_year', '見つかりませんでした')}")
+                        
+                        # 入力タブへデータを転送
+                        st.session_state["scan_model"] = data.get("model", "")
+                        st.session_state["scan_sn"] = data.get("serial_number", "")
+                        st.session_state["scan_year"] = data.get("manufacture_year", "")
+                        
+                        st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
+                    else:
+                        st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
+                        
+                except Exception as e:
+                    st.error(f"🚨 システムエラー: {e}")
