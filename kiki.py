@@ -59,7 +59,7 @@ st.title("医療機器点検アプリ")
 categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
 
 # ==========================================
-# 💡 QRダッシュボード（画像・マニュアル表示対応版）
+# 💡 QRダッシュボード（現場スタッフ＆点検用）
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
@@ -95,6 +95,51 @@ if url_me_no:
                         
                         st.markdown("---")
                         
+                        # ✨【新機能】現場スタッフ用：故障・修理報告フォーム
+                        st.write("### 🚨 現場スタッフ用連絡")
+                        with st.expander("この機器の故障・修理を依頼する", expanded=False):
+                            with st.form("repair_form"):
+                                st.info(f"対象機器: {url_me_no} ({latest_data.get('機種', '-')})")
+                                rep_date = st.date_input("発生日", date.today())
+                                rep_dept = st.selectbox("報告部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
+                                rep_name = st.text_input("報告者名（フルネーム）", placeholder="例: 琉球 花子")
+                                rep_detail = st.text_area("故障の症状・エラー内容", placeholder="例: 電源が入らない、エラーコードE-01が出る等")
+                                
+                                # 送信ボタンを青色（Primary）で目立たせる
+                                submitted_repair = st.form_submit_button("📨 臨床工学技士に報告する", type="primary")
+                                
+                                if submitted_repair:
+                                    if rep_dept == "選択してください" or not rep_name or not rep_detail:
+                                        st.error("⚠️ 部署、お名前、症状をすべて入力してください。")
+                                    else:
+                                        try:
+                                            target_sheet = "故障報告"
+                                            try:
+                                                df_repair = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                                            except Exception:
+                                                df_repair = pd.DataFrame()
+                                            
+                                            repair_data = {
+                                                "報告日": str(date.today()),
+                                                "発生日": str(rep_date),
+                                                "ME No.": url_me_no,
+                                                "機種": latest_data.get('機種', '-'),
+                                                "報告者": rep_name,
+                                                "部署": rep_dept,
+                                                "症状": rep_detail,
+                                                "対応状況": "未対応" # 自動で未対応フラグを付ける
+                                            }
+                                            new_rep_df = pd.DataFrame([repair_data])
+                                            updated_rep_df = pd.concat([df_repair, new_rep_df], ignore_index=True)
+                                            conn.update(worksheet=target_sheet, data=updated_rep_df)
+                                            st.cache_data.clear()
+                                            st.success("✅ 報告が完了しました！担当者が確認します。")
+                                        except Exception as e:
+                                            st.error(f"送信エラー: スプレッドシートに「故障報告」という名前のシートを作成してください。詳細: {e}")
+
+                        st.markdown("---")
+                        
+                        # 過去履歴の表示
                         with st.expander("📝 過去の点検履歴を確認する"):
                             st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
                         
@@ -107,24 +152,22 @@ if url_me_no:
             st.info("💡 この機器の過去の点検記録はまだありません。（新規登録）")
             
     except Exception as e:
-        st.warning("データの読み込みに失敗しました。")
+        st.error(f"🚨 スプレッドシート接続エラー: {e}")
     st.markdown("---")
 
 # ==========================================
-# 💡 アプリ本体メニュー（✨タブを5つに変更！）
+# 💡 アプリ本体メニュー（5タブ）
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 新規登録"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
 # ====== タブ1：入力画面 ======
 with tab1:
     device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
     
-    # ✨ タブ5（AIスキャン）で読み取った型式があれば表示する
     scan_model = st.session_state.get("scan_model", "")
     if scan_model:
         st.info(f"💡 AIが読み取った型式: **{scan_model}** （合っているか確認し、下で選択してください）")
 
-    # 💡 機器ごとの型式選択
     if device_category == "輸液ポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
     elif device_category == "シリンジポンプ":
@@ -147,7 +190,6 @@ with tab1:
         with col_form2:
             me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
-        # ✨ タブ5で読み取ったS/Nを初期値としてセット
         default_sn = st.session_state.get("scan_sn", "")
         serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
@@ -414,22 +456,26 @@ with tab1:
 # ====== タブ2：マスター ======
 with tab2:
     st.subheader("🏥 機器マスター")
-    view_cat_master = st.selectbox("📂 読み込むシートを選択", categories_list, key="master_cat")
+    # マスターシートにも「故障報告」を追加して読み込めるようにしました！
+    view_cat_master = st.selectbox("📂 読み込むシートを選択", categories_list + ["故障報告"], key="master_cat")
     
     if st.button("🔄 台帳を更新する"):
         st.cache_data.clear()
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all")
-        if df.empty or "ME No." not in df.columns:
+        if df.empty or ("ME No." not in df.columns and view_cat_master != "故障報告"):
             st.info(f"「{view_cat_master}」シートにはまだデータがありません。")
         else:
-            df_master = df.drop_duplicates(subset=["ME No."], keep="last")
-            display_cols = ["ME No.", "製造番号", "点検日", "判定"]
-            existing_cols = [col for col in display_cols if col in df_master.columns]
-            st.dataframe(df_master[existing_cols].rename(columns={"点検日": "最終点検日"}), hide_index=True, use_container_width=True)
+            if view_cat_master == "故障報告":
+                st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
+            else:
+                df_master = df.drop_duplicates(subset=["ME No."], keep="last")
+                display_cols = ["ME No.", "製造番号", "点検日", "判定"]
+                existing_cols = [col for col in display_cols if col in df_master.columns]
+                st.dataframe(df_master[existing_cols].rename(columns={"点検日": "最終点検日"}), hide_index=True, use_container_width=True)
     except Exception as e:
-        st.info(f"スプレッドシートに「{view_cat_master}」シートを作成してください。")
+        st.error(f"🚨 接続エラー: {e}")
 
 # ====== タブ3：全履歴 ======
 with tab3:
@@ -450,7 +496,7 @@ with tab3:
                 st.write(f"「{search_query}」の検索結果: {len(df)} 件")
             st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
     except Exception as e:
-        st.info(f"スプレッドシートに「{view_cat_history}」シートを作成してください。")
+        st.error(f"🚨 接続エラー: {e}")
 
 # ====== タブ4：QRコード発行機能 ======
 with tab4:
@@ -503,7 +549,6 @@ with tab5:
         if img_file:
             with st.spinner("AIが文字を解析しています（約10秒）..."):
                 try:
-                    # 公式の最もシンプルで安全な画像処理
                     img = Image.open(img_file)
                     
                     prompt = """
@@ -520,13 +565,11 @@ with tab5:
                     if json_match:
                         data = json.loads(json_match.group())
                         
-                        # 画面に結果を表示
                         st.success("✅ 読み取り成功！")
                         st.write(f"**型式:** {data.get('model', '見つかりませんでした')}")
                         st.write(f"**製造番号:** {data.get('serial_number', '見つかりませんでした')}")
                         st.write(f"**製造年:** {data.get('manufacture_year', '見つかりませんでした')}")
                         
-                        # 入力タブへデータを転送
                         st.session_state["scan_model"] = data.get("model", "")
                         st.session_state["scan_sn"] = data.get("serial_number", "")
                         st.session_state["scan_year"] = data.get("manufacture_year", "")
