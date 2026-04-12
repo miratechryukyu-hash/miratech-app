@@ -13,17 +13,16 @@ import re
 st.set_page_config(page_title="医療機器連携システム", layout="centered")
 
 # ==========================================
-# 💡 URLパラメータの取得（✨ここでモードを判定します！）
+# 💡 URLパラメータの取得（モード判定）
 # ==========================================
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
-# ✨ 「&mode=nurse」が付いていれば看護師モード、無ければ通常モード
 app_mode = query_params.get("mode", "admin") 
 
 categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
 
 # ==========================================
-# 🔐 セキュリティ：パスワード認証ブロック（※看護師モードはパスワード不要にする！）
+# 🔐 セキュリティ：パスワード認証ブロック
 # ==========================================
 def check_password():
     def password_entered():
@@ -43,7 +42,6 @@ def check_password():
         return False
     return True
 
-# ✨ 看護師モードの時はパスワードを求めない（誰でもすぐに報告できるようにする）
 if app_mode != "nurse":
     if not check_password():
         st.stop()
@@ -69,7 +67,6 @@ if app_mode == "nurse":
     if url_me_no:
         st.success(f"📱 読み込み成功: 対象機器 **{url_me_no}**")
         
-        # 機器名の取得を試みる
         device_name = "不明な機器"
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
@@ -91,13 +88,40 @@ if app_mode == "nurse":
             rep_date = st.date_input("発生日", date.today())
             rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
             rep_name = st.text_input("報告者名", placeholder="例: 琉球 花子")
-            rep_detail = st.text_area("具体的な症状・エラー内容", placeholder="例: 電源が入らない、エラーE-01が出る、部品が破損している等")
+            
+            # ✨ 【新機能】ワンタッチ症状選択！
+            st.write("▼ 症状・エラー内容（該当するものをタップ）")
+            col_err1, col_err2 = st.columns(2)
+            with col_err1:
+                err_power = st.checkbox("🔌 電源が入らない")
+                err_error = st.checkbox("⚠️ エラー表示が出る")
+                err_batt  = st.checkbox("🔋 バッテリー劣化")
+            with col_err2:
+                err_alarm = st.checkbox("🔔 アラームが止まらない")
+                err_drop  = st.checkbox("💥 落下・外装破損")
+                err_other = st.checkbox("📝 その他（下に記入）")
+            
+            rep_detail = st.text_area("詳細（エラーコードなど）", placeholder="例: E-01と表示されている、点滴スタンドから落とした 等")
             
             submitted_repair = st.form_submit_button("📨 臨床工学技士に送信する", type="primary", use_container_width=True)
             
             if submitted_repair:
-                if rep_dept == "選択してください" or not rep_name or not rep_detail:
-                    st.error("⚠️ 部署、お名前、症状をすべて入力してください。")
+                # 選択されたエラーを文章にまとめる
+                selected_errors = []
+                if err_power: selected_errors.append("電源が入らない")
+                if err_error: selected_errors.append("エラー表示")
+                if err_batt:  selected_errors.append("バッテリー劣化")
+                if err_alarm: selected_errors.append("アラーム停止不可")
+                if err_drop:  selected_errors.append("落下・破損")
+                if err_other: selected_errors.append("その他")
+                
+                final_symptom = "、".join(selected_errors)
+                if rep_detail:
+                    # テキスト入力があれば付け足す
+                    final_symptom += f"（詳細: {rep_detail}）"
+
+                if rep_dept == "選択してください" or not rep_name or not final_symptom:
+                    st.error("⚠️ 部署、お名前、症状（チェックまたは記入）をすべて入力してください。")
                 else:
                     try:
                         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -114,7 +138,7 @@ if app_mode == "nurse":
                             "機種": device_name,
                             "報告者": rep_name,
                             "部署": rep_dept,
-                            "症状": rep_detail,
+                            "症状": final_symptom,
                             "対応状況": "未対応" 
                         }
                         new_rep_df = pd.DataFrame([repair_data])
@@ -128,14 +152,12 @@ if app_mode == "nurse":
     else:
         st.warning("⚠️ ME No.が認識できません。機器に貼られているQRコードを再度読み込んでください。")
     
-    # 現場スタッフにはこれより下の画面（安富さん用）は一切見せない！
     st.stop()
 
 
 # ==========================================
 # 👨‍🔧 【ルートB】管理者（CE・安富さん）専用モード
 # ==========================================
-# ここから下は、今まで通りの点検アプリのコードです。
 with st.sidebar:
     st.subheader("💼 miratech 設定")
     display_name = st.text_input("🏢 施設名", value="うえむら病院")
@@ -181,6 +203,73 @@ if url_me_no:
                         
                         st.markdown("---")
                         
+                        st.write("### 🚨 現場スタッフ用連絡")
+                        with st.expander("この機器の故障・修理を依頼する", expanded=False):
+                            with st.form("admin_repair_form"):
+                                st.info(f"対象機器: {url_me_no} ({latest_data.get('機種', '-')})")
+                                rep_date = st.date_input("発生日", date.today())
+                                rep_dept = st.selectbox("報告部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
+                                rep_name = st.text_input("報告者名", placeholder="例: 琉球 花子")
+                                
+                                # ✨ 【新機能】ワンタッチ症状選択！（管理者ダッシュボード側）
+                                st.write("▼ 症状・エラー内容")
+                                col_err3, col_err4 = st.columns(2)
+                                with col_err3:
+                                    err_power2 = st.checkbox("🔌 電源が入らない", key="p2")
+                                    err_error2 = st.checkbox("⚠️ エラー表示が出る", key="e2")
+                                    err_batt2  = st.checkbox("🔋 バッテリー劣化", key="b2")
+                                with col_err4:
+                                    err_alarm2 = st.checkbox("🔔 アラームが止まらない", key="a2")
+                                    err_drop2  = st.checkbox("💥 落下・外装破損", key="d2")
+                                    err_other2 = st.checkbox("📝 その他", key="o2")
+                                
+                                rep_detail = st.text_area("詳細（エラーコードなど）", placeholder="例: E-01と表示されている等")
+                                
+                                submitted_repair = st.form_submit_button("📨 臨床工学技士に送信する", type="primary")
+                                
+                                if submitted_repair:
+                                    selected_errors2 = []
+                                    if err_power2: selected_errors2.append("電源が入らない")
+                                    if err_error2: selected_errors2.append("エラー表示")
+                                    if err_batt2:  selected_errors2.append("バッテリー劣化")
+                                    if err_alarm2: selected_errors2.append("アラーム停止不可")
+                                    if err_drop2:  selected_errors2.append("落下・破損")
+                                    if err_other2: selected_errors2.append("その他")
+                                    
+                                    final_symptom2 = "、".join(selected_errors2)
+                                    if rep_detail:
+                                        final_symptom2 += f"（詳細: {rep_detail}）"
+
+                                    if rep_dept == "選択してください" or not rep_name or not final_symptom2:
+                                        st.error("⚠️ 部署、お名前、症状をすべて入力してください。")
+                                    else:
+                                        try:
+                                            target_sheet = "故障報告"
+                                            try:
+                                                df_repair = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                                            except Exception:
+                                                df_repair = pd.DataFrame()
+                                            
+                                            repair_data = {
+                                                "報告日": str(date.today()),
+                                                "発生日": str(rep_date),
+                                                "ME No.": url_me_no,
+                                                "機種": latest_data.get('機種', '-'),
+                                                "報告者": rep_name,
+                                                "部署": rep_dept,
+                                                "症状": final_symptom2,
+                                                "対応状況": "未対応" 
+                                            }
+                                            new_rep_df = pd.DataFrame([repair_data])
+                                            updated_rep_df = pd.concat([df_repair, new_rep_df], ignore_index=True)
+                                            conn.update(worksheet=target_sheet, data=updated_rep_df)
+                                            st.cache_data.clear()
+                                            st.success("✅ 報告が完了しました！")
+                                        except Exception as e:
+                                            st.error(f"送信エラー詳細: {e}")
+
+                        st.markdown("---")
+                        
                         with st.expander("📝 過去の点検履歴を確認する"):
                             st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
                         
@@ -197,7 +286,7 @@ if url_me_no:
     st.markdown("---")
 
 # ==========================================
-# 💡 アプリ本体メニュー
+# 💡 アプリ本体メニュー（6タブ）
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録", "💰 コストシミュ"])
 
@@ -548,7 +637,6 @@ with tab4:
     
     if st.button("QRコードを作成する"):
         if base_url and target_qr_me:
-            # ✨ QRコードのURLに「&mode=nurse」を仕込む！
             if "?" in base_url:
                  final_url = f"{base_url}&me_no={target_qr_me}&mode=nurse"
             elif base_url.endswith("/"):
