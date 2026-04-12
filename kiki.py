@@ -10,17 +10,26 @@ import json
 import re                            
 
 # ページ設定
-st.set_page_config(page_title="miratech 点検アプリ", layout="centered")
+st.set_page_config(page_title="医療機器連携システム", layout="centered")
 
 # ==========================================
-# 🔐 セキュリティ：パスワード認証ブロック
+# 💡 URLパラメータの取得（✨ここでモードを判定します！）
+# ==========================================
+query_params = st.query_params
+url_me_no = query_params.get("me_no", "")
+# ✨ 「&mode=nurse」が付いていれば看護師モード、無ければ通常モード
+app_mode = query_params.get("mode", "admin") 
+
+categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
+
+# ==========================================
+# 🔐 セキュリティ：パスワード認証ブロック（※看護師モードはパスワード不要にする！）
 # ==========================================
 def check_password():
-    """正しいパスワードが入力されるまでアプリをロックする"""
     def password_entered():
         if st.session_state["password"] == st.secrets["app_password"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # 安全のため入力した文字をメモリから消去
+            del st.session_state["password"] 
         else:
             st.session_state["password_correct"] = False
 
@@ -30,12 +39,14 @@ def check_password():
         return False
     elif not st.session_state["password_correct"]:
         st.text_input("🔑 パスワードを入力してください", type="password", on_change=password_entered, key="password")
-        st.error("❌ パスワードが違います。不正アクセスのログを記録しました。")
+        st.error("❌ パスワードが違います。")
         return False
     return True
 
-if not check_password():
-    st.stop()
+# ✨ 看護師モードの時はパスワードを求めない（誰でもすぐに報告できるようにする）
+if app_mode != "nurse":
+    if not check_password():
+        st.stop()
 
 # ==========================================
 # 🤖 AI設定（Gemini）
@@ -49,17 +60,92 @@ if "GEMINI_API_KEY" in st.secrets:
         st.error(f"APIキーの設定エラー: {e}")
 
 # ==========================================
-# 💡 アプリ本体
+# 👩‍⚕️ 【ルートA】現場スタッフ（看護師）専用モード
 # ==========================================
-query_params = st.query_params
-url_me_no = query_params.get("me_no", "")
+if app_mode == "nurse":
+    st.markdown("<h2 style='text-align: center; color: #FF4B4B;'>🚨 機器トラブル報告システム</h2>", unsafe_allow_html=True)
+    st.write("不具合を見つけた場合は、以下のフォームから直ちにご報告ください。")
+    
+    if url_me_no:
+        st.success(f"📱 読み込み成功: 対象機器 **{url_me_no}**")
+        
+        # 機器名の取得を試みる
+        device_name = "不明な機器"
+        try:
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            for cat in categories_list:
+                try:
+                    df_cat = conn.read(worksheet=cat, ttl=0).dropna(how="all")
+                    if "ME No." in df_cat.columns:
+                        df_device = df_cat[df_cat["ME No."].astype(str) == url_me_no]
+                        if not df_device.empty:
+                            device_name = df_device.iloc[-1].get('機種', '-')
+                            break
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
-st.title("うえむら病院専用")
+        with st.form("nurse_report_form"):
+            st.info(f"対象機器: {url_me_no} ({device_name})")
+            rep_date = st.date_input("発生日", date.today())
+            rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
+            rep_name = st.text_input("報告者名", placeholder="例: 琉球 花子")
+            rep_detail = st.text_area("具体的な症状・エラー内容", placeholder="例: 電源が入らない、エラーE-01が出る、部品が破損している等")
+            
+            submitted_repair = st.form_submit_button("📨 臨床工学技士に送信する", type="primary", use_container_width=True)
+            
+            if submitted_repair:
+                if rep_dept == "選択してください" or not rep_name or not rep_detail:
+                    st.error("⚠️ 部署、お名前、症状をすべて入力してください。")
+                else:
+                    try:
+                        conn = st.connection("gsheets", type=GSheetsConnection)
+                        target_sheet = "故障報告"
+                        try:
+                            df_repair = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                        except Exception:
+                            df_repair = pd.DataFrame()
+                        
+                        repair_data = {
+                            "報告日": str(date.today()),
+                            "発生日": str(rep_date),
+                            "ME No.": url_me_no,
+                            "機種": device_name,
+                            "報告者": rep_name,
+                            "部署": rep_dept,
+                            "症状": rep_detail,
+                            "対応状況": "未対応" 
+                        }
+                        new_rep_df = pd.DataFrame([repair_data])
+                        updated_rep_df = pd.concat([df_repair, new_rep_df], ignore_index=True)
+                        conn.update(worksheet=target_sheet, data=updated_rep_df)
+                        st.cache_data.clear()
+                        st.balloons()
+                        st.success("✅ 報告が完了しました！担当の臨床工学技士が確認します。ありがとうございました。")
+                    except Exception as e:
+                        st.error(f"送信エラー: スプレッドシートに「故障報告」シートがありません。詳細: {e}")
+    else:
+        st.warning("⚠️ ME No.が認識できません。機器に貼られているQRコードを再度読み込んでください。")
+    
+    # 現場スタッフにはこれより下の画面（安富さん用）は一切見せない！
+    st.stop()
+
+
+# ==========================================
+# 👨‍🔧 【ルートB】管理者（CE・安富さん）専用モード
+# ==========================================
+# ここから下は、今まで通りの点検アプリのコードです。
+with st.sidebar:
+    st.subheader("💼 miratech 設定")
+    display_name = st.text_input("🏢 施設名", value="うえむら病院")
+    st.markdown("---")
+
+st.title(f"{display_name} 専用")
 st.title("医療機器点検アプリ")
-categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
 
 # ==========================================
-# 💡 QRダッシュボード（現場スタッフ＆点検用）
+# 💡 QRダッシュボード（管理者用）
 # ==========================================
 if url_me_no:
     st.success(f"📱 対象機器を認識しました: **{url_me_no}**")
@@ -95,51 +181,6 @@ if url_me_no:
                         
                         st.markdown("---")
                         
-                        # ✨【新機能】現場スタッフ用：故障・修理報告フォーム
-                        st.write("### 🚨 現場スタッフ用連絡")
-                        with st.expander("この機器の故障・修理を依頼する", expanded=False):
-                            with st.form("repair_form"):
-                                st.info(f"対象機器: {url_me_no} ({latest_data.get('機種', '-')})")
-                                rep_date = st.date_input("発生日", date.today())
-                                rep_dept = st.selectbox("報告部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
-                                rep_name = st.text_input("報告者名（フルネーム）", placeholder="例: 琉球 花子")
-                                rep_detail = st.text_area("故障の症状・エラー内容", placeholder="例: 電源が入らない、エラーコードE-01が出る等")
-                                
-                                # 送信ボタンを青色（Primary）で目立たせる
-                                submitted_repair = st.form_submit_button("📨 臨床工学技士に報告する", type="primary")
-                                
-                                if submitted_repair:
-                                    if rep_dept == "選択してください" or not rep_name or not rep_detail:
-                                        st.error("⚠️ 部署、お名前、症状をすべて入力してください。")
-                                    else:
-                                        try:
-                                            target_sheet = "故障報告"
-                                            try:
-                                                df_repair = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
-                                            except Exception:
-                                                df_repair = pd.DataFrame()
-                                            
-                                            repair_data = {
-                                                "報告日": str(date.today()),
-                                                "発生日": str(rep_date),
-                                                "ME No.": url_me_no,
-                                                "機種": latest_data.get('機種', '-'),
-                                                "報告者": rep_name,
-                                                "部署": rep_dept,
-                                                "症状": rep_detail,
-                                                "対応状況": "未対応" # 自動で未対応フラグを付ける
-                                            }
-                                            new_rep_df = pd.DataFrame([repair_data])
-                                            updated_rep_df = pd.concat([df_repair, new_rep_df], ignore_index=True)
-                                            conn.update(worksheet=target_sheet, data=updated_rep_df)
-                                            st.cache_data.clear()
-                                            st.success("✅ 報告が完了しました！担当者が確認します。")
-                                        except Exception as e:
-                                            st.error(f"送信エラー: スプレッドシートに「故障報告」という名前のシートを作成してください。詳細: {e}")
-
-                        st.markdown("---")
-                        
-                        # 過去履歴の表示
                         with st.expander("📝 過去の点検履歴を確認する"):
                             st.dataframe(df_device.iloc[::-1], use_container_width=True, hide_index=True)
                         
@@ -156,9 +197,9 @@ if url_me_no:
     st.markdown("---")
 
 # ==========================================
-# 💡 アプリ本体メニュー（5タブ）
+# 💡 アプリ本体メニュー
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録", "💰 コストシミュ"])
 
 # ====== タブ1：入力画面 ======
 with tab1:
@@ -456,7 +497,6 @@ with tab1:
 # ====== タブ2：マスター ======
 with tab2:
     st.subheader("🏥 機器マスター")
-    # マスターシートにも「故障報告」を追加して読み込めるようにしました！
     view_cat_master = st.selectbox("📂 読み込むシートを選択", categories_list + ["故障報告"], key="master_cat")
     
     if st.button("🔄 台帳を更新する"):
@@ -503,15 +543,18 @@ with tab4:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
-    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="https://miratechryukyu-hash-miratech-app-kiki-nnm67c.streamlit.app")
+    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="ここにアプリのURLを貼り付けてください")
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: TE-381-001")
     
     if st.button("QRコードを作成する"):
         if base_url and target_qr_me:
-            if base_url.endswith("/"):
-                final_url = f"{base_url}?me_no={target_qr_me}"
+            # ✨ QRコードのURLに「&mode=nurse」を仕込む！
+            if "?" in base_url:
+                 final_url = f"{base_url}&me_no={target_qr_me}&mode=nurse"
+            elif base_url.endswith("/"):
+                final_url = f"{base_url}?me_no={target_qr_me}&mode=nurse"
             else:
-                final_url = f"{base_url}/?me_no={target_qr_me}"
+                final_url = f"{base_url}/?me_no={target_qr_me}&mode=nurse"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
             qr.add_data(final_url)
@@ -523,6 +566,7 @@ with tab4:
             byte_im = buf.getvalue()
             
             st.success(f"「{target_qr_me}」専用のQRコードができました！")
+            st.write("※このQRコードを読むと「看護師モード（報告専用画面）」が開きます。")
             st.image(byte_im, width=200)
             
             st.download_button(
@@ -580,3 +624,46 @@ with tab5:
                         
                 except Exception as e:
                     st.error(f"🚨 システムエラー: {e}")
+
+# ==========================================
+# ✨ タブ6：コスト削減シミュレーター
+# ==========================================
+with tab6:
+    st.subheader("💰 コスト削減シミュレーター")
+    st.write("軽微な修理（バッテリー交換やパッキン交換など）をメーカーではなくmiratechにお任せいただいた場合の、**年間のコスト削減効果**を試算します。")
+
+    col_sim1, col_sim2 = st.columns(2)
+    
+    with col_sim1:
+        st.write("#### ▼ 条件を入力してください")
+        maker_cost = st.slider("🏢 メーカー修理代 / 1回 (万円)", min_value=1, max_value=30, value=10)
+        miratech_cost = st.slider("🔧 miratech 修理代 / 1回 (万円)", min_value=1, max_value=30, value=5)
+        repair_count = st.slider("📅 年間の想定修理件数 (件)", min_value=1, max_value=100, value=12)
+
+    maker_total = maker_cost * repair_count
+    miratech_total = miratech_cost * repair_count
+    savings = maker_total - miratech_total
+
+    with col_sim2:
+        st.write("#### ▼ 予想される削減効果")
+        st.info(f"💡 1回あたりの削減額: **{maker_cost - miratech_cost} 万円**")
+        st.success("✨ 年間コスト削減額 ✨")
+        st.markdown(f"<h1 style='text-align: center; color: #ff4b4b; font-size: 3.5rem;'>{savings} 万円</h1>", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.write("### 📊 年間予想コスト比較表")
+
+    df_chart = pd.DataFrame({
+        "プラン": ["メーカーに依頼した場合", "miratechに依頼した場合"],
+        "年間コスト (万円)": [maker_total, miratech_total]
+    }).set_index("プラン")
+
+    st.bar_chart(df_chart, use_container_width=True)
+
+    st.write("▼ 詳細データ")
+    df_table = pd.DataFrame({
+        "項目": ["1回あたりのコスト", "想定年間件数", "年間トータルコスト"],
+        "メーカー依頼": [f"{maker_cost} 万円", f"{repair_count} 件", f"{maker_total} 万円"],
+        "miratech": [f"{miratech_cost} 万円", f"{repair_count} 件", f"{miratech_total} 万円"]
+    })
+    st.dataframe(df_table, hide_index=True, use_container_width=True)
