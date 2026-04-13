@@ -73,16 +73,25 @@ if app_mode == "nurse":
         
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
+            # ✨ 「1117.0」問題の修正：URLの文字を綺麗にする
+            clean_url_me = str(url_me_no).strip()
+
             for cat in categories_list:
                 try:
                     df_cat = conn.read(worksheet=cat, ttl=0).dropna(how="all")
                     if "ME No." in df_cat.columns:
-                        df_device = df_cat[df_cat["ME No."].astype(str) == url_me_no]
+                        # ✨ 「1117.0」問題の修正：データ側の「.0」を強制削除して比較！
+                        clean_db_me = df_cat["ME No."].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                        df_device = df_cat[clean_db_me == clean_url_me]
+                        
                         if not df_device.empty:
                             latest_data = df_device.iloc[-1]
-                            device_name = latest_data.get('機種', '-')
-                            vendor_name = latest_data.get('購入元', '')
-                            vendor_phone = latest_data.get('業者電話番号', '')
+                            device_name = str(latest_data.get('機種', '-')).strip()
+                            vendor_name = str(latest_data.get('購入元', '')).strip()
+                            
+                            # 電話番号の「nan」空データ対策
+                            v_phone = str(latest_data.get('業者電話番号', '')).strip()
+                            vendor_phone = "" if v_phone.lower() == "nan" else v_phone
                             break
                 except Exception:
                     continue
@@ -154,15 +163,14 @@ if app_mode == "nurse":
                     except Exception as e:
                         st.error(f"送信エラー: スプレッドシートに「故障報告」シートがありません。詳細: {e}")
 
-        # ✨ 【新機能】緊急！業者へのワンタッチ電話ボタン
-        if pd.notnull(vendor_phone) and str(vendor_phone).strip() != "":
+        # ✨ 電話ボタンを確実に出現させるロジック！
+        if vendor_phone != "":
             st.markdown("---")
             st.error("🚨 【至急】業者へ直接連絡する場合")
             st.write(f"この機器は **{vendor_name}** から購入しています。")
-            # tel: リンクを使うことで、スマホの電話アプリが直接立ち上がります！
             st.link_button(f"📞 {vendor_name} に電話をかける ({vendor_phone})", f"tel:{vendor_phone}", type="primary", use_container_width=True)
-        elif submitted_repair:
-            st.info("※ この機器には業者の連絡先が登録されていません。CEの対応をお待ちください。")
+        else:
+            st.info("※ この機器には業者の連絡先が登録されていません。")
 
     else:
         st.warning("⚠️ ME No.が認識できません。機器に貼られているQRコードを再度読み込んでください。")
@@ -194,11 +202,15 @@ if url_me_no:
     device_found = False
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
+        clean_url_me = str(url_me_no).strip()
+
         for cat in categories_list:
             try:
                 df_cat = conn.read(worksheet=cat, ttl=0).dropna(how="all")
                 if "ME No." in df_cat.columns:
-                    df_device = df_cat[df_cat["ME No."].astype(str) == url_me_no]
+                    clean_db_me = df_cat["ME No."].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                    df_device = df_cat[clean_db_me == clean_url_me]
+                    
                     if not df_device.empty:
                         latest_data = df_device.iloc[-1]
                         
@@ -288,9 +300,11 @@ if url_me_no:
                                             st.error(f"送信エラー詳細: {e}")
 
                         # 管理者側にも電話ボタンを表示
-                        vendor_name_admin = latest_data.get('購入元', '')
-                        vendor_phone_admin = latest_data.get('業者電話番号', '')
-                        if pd.notnull(vendor_phone_admin) and str(vendor_phone_admin).strip() != "":
+                        vendor_name_admin = str(latest_data.get('購入元', '')).strip()
+                        v_phone_admin = str(latest_data.get('業者電話番号', '')).strip()
+                        vendor_phone_admin = "" if v_phone_admin.lower() == "nan" else v_phone_admin
+                        
+                        if vendor_phone_admin != "":
                             st.link_button(f"📞 {vendor_name_admin} に電話をかける ({vendor_phone_admin})", f"tel:{vendor_phone_admin}")
 
                         st.markdown("---")
@@ -353,7 +367,6 @@ with tab1:
         default_sn = st.session_state.get("scan_sn", "")
         serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
         
-        # ✨ 【新機能】業者連絡先（電話番号）の入力欄を追加！
         with st.expander("🏢 事務・業者データ（新規登録・更新時のみ）", expanded=False):
             vendor = st.text_input("購入元・販売業者", placeholder="例: 〇〇医療器械株式会社")
             vendor_phone = st.text_input("業者電話番号（ハイフンあり推奨）", placeholder="例: 098-123-4567")
@@ -544,7 +557,8 @@ with tab1:
                 
                 is_duplicate = False
                 if not existing_data.empty and "ME No." in existing_data.columns and "点検日" in existing_data.columns:
-                    is_duplicate = ((existing_data["ME No."] == me_no) & (existing_data["点検日"].astype(str) == str(check_date))).any()
+                    clean_db_me_check = existing_data["ME No."].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                    is_duplicate = ((clean_db_me_check == str(me_no).strip()) & (existing_data["点検日"].astype(str) == str(check_date))).any()
                 
                 if is_duplicate:
                     st.error(f"🚨 ちょっと待って！「{me_no}」は本日（{check_date}）すでに点検済みです！")
@@ -553,12 +567,12 @@ with tab1:
                     data_dict = {
                         "カテゴリ": device_category,
                         "点検日": str(check_date),
-                        "ME No.": me_no,
+                        "ME No.": str(me_no).strip(),
                         "製造番号": serial_no,
                         "製造年": st.session_state.get("scan_year", ""),
                         "機種": combined_model,
                         "購入元": vendor,                     
-                        "業者電話番号": vendor_phone,         # ✨ 保存データに追加！
+                        "業者電話番号": vendor_phone,         
                         "購入年月日": str(purchased_date),   
                         "実施者": inspector,
                         "判定": result,
@@ -642,7 +656,9 @@ with tab2:
                 try:
                     df = conn.read(worksheet=cat, ttl=0).dropna(how="all")
                     if not df.empty and "ME No." in df.columns:
-                        df_master = df.drop_duplicates(subset=["ME No."], keep="last")
+                        # ME No.を綺麗にして重複を弾く
+                        df["ME_Clean"] = df["ME No."].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                        df_master = df.drop_duplicates(subset=["ME_Clean"], keep="last")
                         if "カテゴリ" not in df_master.columns:
                             df_master["カテゴリ"] = cat
                         all_devices = pd.concat([all_devices, df_master], ignore_index=True)
@@ -663,24 +679,27 @@ with tab2:
                 
                 with sub_tab2:
                     st.write("特定の機器の購入元や詳細を調べたい場合は、ここでME No.を検索してください。")
-                    search_me = st.selectbox("🔍 詳細を見たいME No.を選択", all_devices["ME No."].tolist())
+                    # 検索用の綺麗なリストを作る
+                    clean_me_list = all_devices["ME_Clean"].tolist()
+                    search_me = st.selectbox("🔍 詳細を見たいME No.を選択", clean_me_list)
                     
                     if search_me:
-                        target_data = all_devices[all_devices["ME No."] == search_me].iloc[0]
+                        target_data = all_devices[all_devices["ME_Clean"] == search_me].iloc[0]
                         
                         st.markdown("### 🏢 事務・台帳情報")
                         col_j1, col_j2 = st.columns(2)
                         with col_j1:
-                            st.write(f"**ME No.:** {target_data.get('ME No.', '-')}")
+                            st.write(f"**ME No.:** {target_data.get('ME_Clean', '-')}")
                             st.write(f"**機種:** {target_data.get('機種', '-')}")
                             st.write(f"**製造番号:** {target_data.get('製造番号', '-')}")
                         with col_j2:
-                            vendor_val = target_data.get("購入元", "")
-                            phone_val = target_data.get("業者電話番号", "")
-                            date_val = target_data.get("購入年月日", "")
-                            st.write(f"**購入元・販売業者:** {vendor_val if vendor_val else '未登録'}")
-                            st.write(f"**業者電話番号:** {phone_val if phone_val else '未登録'}")
-                            st.write(f"**購入年月日:** {date_val if date_val else '未登録'}")
+                            vendor_val = str(target_data.get("購入元", "")).strip()
+                            phone_val = str(target_data.get("業者電話番号", "")).strip()
+                            date_val = str(target_data.get("購入年月日", "")).strip()
+                            
+                            st.write(f"**購入元・販売業者:** {vendor_val if vendor_val and vendor_val != 'nan' else '未登録'}")
+                            st.write(f"**業者電話番号:** {phone_val if phone_val and phone_val != 'nan' else '未登録'}")
+                            st.write(f"**購入年月日:** {date_val if date_val and date_val != 'nan' else '未登録'}")
                             st.write(f"**最終点検日:** {target_data.get('点検日', '-')}")
                             
         except Exception as e:
@@ -701,7 +720,9 @@ with tab3:
         else:
             search_query = st.text_input("🔍 探したい「ME No.」を入力してください", value=url_me_no)
             if search_query:
-                df = df[df["ME No."].astype(str).fillna("").str.contains(search_query, case=False)]
+                # 検索時も.0を無視してマッチングしやすくする
+                clean_df_me = df["ME No."].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                df = df[clean_df_me.str.contains(str(search_query).strip(), case=False)]
                 st.write(f"「{search_query}」の検索結果: {len(df)} 件")
             st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
     except Exception as e:
