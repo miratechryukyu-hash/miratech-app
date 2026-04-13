@@ -89,7 +89,6 @@ if app_mode == "nurse":
             rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
             rep_name = st.text_input("報告者名", placeholder="例: 琉球 花子")
             
-            # ✨ 【新機能】ワンタッチ症状選択！
             st.write("▼ 症状・エラー内容（該当するものをタップ）")
             col_err1, col_err2 = st.columns(2)
             with col_err1:
@@ -106,7 +105,6 @@ if app_mode == "nurse":
             submitted_repair = st.form_submit_button("📨 臨床工学技士に送信する", type="primary", use_container_width=True)
             
             if submitted_repair:
-                # 選択されたエラーを文章にまとめる
                 selected_errors = []
                 if err_power: selected_errors.append("電源が入らない")
                 if err_error: selected_errors.append("エラー表示")
@@ -117,7 +115,6 @@ if app_mode == "nurse":
                 
                 final_symptom = "、".join(selected_errors)
                 if rep_detail:
-                    # テキスト入力があれば付け足す
                     final_symptom += f"（詳細: {rep_detail}）"
 
                 if rep_dept == "選択してください" or not rep_name or not final_symptom:
@@ -154,14 +151,20 @@ if app_mode == "nurse":
     
     st.stop()
 
-
 # ==========================================
 # 👨‍🔧 【ルートB】管理者（CE・安富さん）専用モード
 # ==========================================
 with st.sidebar:
-    st.subheader("💼 miratech 設定")
-    display_name = st.text_input("🏢 施設名", value="うえむら病院")
+    st.subheader("💼 デモ設定 (お客様に見せる前に設定)")
+    display_name = st.text_input("🏢 提案先の施設名", value="みらいクリニック")
+    
     st.markdown("---")
+    # ✨ 【新機能】安富さん専用の隠しスイッチ！
+    st.write("🔧 管理者用機能")
+    show_sim = st.checkbox("💰 営業用コストシミュレーターを表示")
+    
+    st.markdown("---")
+    st.info("💡 設定後は右上の「✕」を押してこのメニューを隠してください。")
 
 st.title(f"{display_name} 専用")
 st.title("医療機器点検アプリ")
@@ -211,7 +214,6 @@ if url_me_no:
                                 rep_dept = st.selectbox("報告部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
                                 rep_name = st.text_input("報告者名", placeholder="例: 琉球 花子")
                                 
-                                # ✨ 【新機能】ワンタッチ症状選択！（管理者ダッシュボード側）
                                 st.write("▼ 症状・エラー内容")
                                 col_err3, col_err4 = st.columns(2)
                                 with col_err3:
@@ -286,9 +288,15 @@ if url_me_no:
     st.markdown("---")
 
 # ==========================================
-# 💡 アプリ本体メニュー（6タブ）
+# 💡 アプリ本体メニュー（動的タブ生成）
 # ==========================================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録", "💰 コストシミュ"])
+# ✨ サイドバーのチェックが入っている時だけ、6個目のタブを追加する！
+tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"]
+if show_sim:
+    tab_names.append("💰 コストシミュ")
+
+tabs = st.tabs(tab_names)
+tab1, tab2, tab3, tab4, tab5 = tabs[:5]
 
 # ====== タブ1：入力画面 ======
 with tab1:
@@ -666,9 +674,7 @@ with tab4:
         else:
             st.warning("アプリのURLと、ME No.の両方を入力してください。")
 
-# ==========================================
-# ✨ タブ5：AI新規登録ダッシュボード
-# ==========================================
+# ====== タブ5：AI新規登録ダッシュボード ======
 with tab5:
     st.subheader("📸 AI銘板スキャナー (新規登録用)")
     st.write("新しい機器の銘板を撮影すると、情報を読み取って「点検入力」タブに自動転送します。")
@@ -714,44 +720,45 @@ with tab5:
                     st.error(f"🚨 システムエラー: {e}")
 
 # ==========================================
-# ✨ タブ6：コスト削減シミュレーター
+# ✨ 【新機能】タブ6：コスト削減シミュレーター（チェックが入った時のみ出現！）
 # ==========================================
-with tab6:
-    st.subheader("💰 コスト削減シミュレーター")
-    st.write("軽微な修理（バッテリー交換やパッキン交換など）をメーカーではなくmiratechにお任せいただいた場合の、**年間のコスト削減効果**を試算します。")
+if show_sim:
+    with tabs[5]:
+        st.subheader("💰 コスト削減シミュレーター")
+        st.write("軽微な修理（バッテリー交換やパッキン交換など）をメーカーではなくmiratechにお任せいただいた場合の、**年間のコスト削減効果**を試算します。")
 
-    col_sim1, col_sim2 = st.columns(2)
-    
-    with col_sim1:
-        st.write("#### ▼ 条件を入力してください")
-        maker_cost = st.slider("🏢 メーカー修理代 / 1回 (万円)", min_value=1, max_value=30, value=10)
-        miratech_cost = st.slider("🔧 miratech 修理代 / 1回 (万円)", min_value=1, max_value=30, value=5)
-        repair_count = st.slider("📅 年間の想定修理件数 (件)", min_value=1, max_value=100, value=12)
+        col_sim1, col_sim2 = st.columns(2)
+        
+        with col_sim1:
+            st.write("#### ▼ 条件を入力してください")
+            maker_cost = st.slider("🏢 メーカー修理代 / 1回 (万円)", min_value=1, max_value=30, value=10)
+            miratech_cost = st.slider("🔧 miratech 修理代 / 1回 (万円)", min_value=1, max_value=30, value=5)
+            repair_count = st.slider("📅 年間の想定修理件数 (件)", min_value=1, max_value=100, value=12)
 
-    maker_total = maker_cost * repair_count
-    miratech_total = miratech_cost * repair_count
-    savings = maker_total - miratech_total
+        maker_total = maker_cost * repair_count
+        miratech_total = miratech_cost * repair_count
+        savings = maker_total - miratech_total
 
-    with col_sim2:
-        st.write("#### ▼ 予想される削減効果")
-        st.info(f"💡 1回あたりの削減額: **{maker_cost - miratech_cost} 万円**")
-        st.success("✨ 年間コスト削減額 ✨")
-        st.markdown(f"<h1 style='text-align: center; color: #ff4b4b; font-size: 3.5rem;'>{savings} 万円</h1>", unsafe_allow_html=True)
+        with col_sim2:
+            st.write("#### ▼ 予想される削減効果")
+            st.info(f"💡 1回あたりの削減額: **{maker_cost - miratech_cost} 万円**")
+            st.success("✨ 年間コスト削減額 ✨")
+            st.markdown(f"<h1 style='text-align: center; color: #ff4b4b; font-size: 3.5rem;'>{savings} 万円</h1>", unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.write("### 📊 年間予想コスト比較表")
+        st.markdown("---")
+        st.write("### 📊 年間予想コスト比較表")
 
-    df_chart = pd.DataFrame({
-        "プラン": ["メーカーに依頼した場合", "miratechに依頼した場合"],
-        "年間コスト (万円)": [maker_total, miratech_total]
-    }).set_index("プラン")
+        df_chart = pd.DataFrame({
+            "プラン": ["メーカーに依頼した場合", "miratechに依頼した場合"],
+            "年間コスト (万円)": [maker_total, miratech_total]
+        }).set_index("プラン")
 
-    st.bar_chart(df_chart, use_container_width=True)
+        st.bar_chart(df_chart, use_container_width=True)
 
-    st.write("▼ 詳細データ")
-    df_table = pd.DataFrame({
-        "項目": ["1回あたりのコスト", "想定年間件数", "年間トータルコスト"],
-        "メーカー依頼": [f"{maker_cost} 万円", f"{repair_count} 件", f"{maker_total} 万円"],
-        "miratech": [f"{miratech_cost} 万円", f"{repair_count} 件", f"{miratech_total} 万円"]
-    })
-    st.dataframe(df_table, hide_index=True, use_container_width=True)
+        st.write("▼ 詳細データ")
+        df_table = pd.DataFrame({
+            "項目": ["1回あたりのコスト", "想定年間件数", "年間トータルコスト"],
+            "メーカー依頼": [f"{maker_cost} 万円", f"{repair_count} 件", f"{maker_total} 万円"],
+            "miratech": [f"{miratech_cost} 万円", f"{repair_count} 件", f"{miratech_total} 万円"]
+        })
+        st.dataframe(df_table, hide_index=True, use_container_width=True)
