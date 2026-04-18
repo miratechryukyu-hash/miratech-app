@@ -635,42 +635,45 @@ with tab3:
     except Exception as e:
         st.error(f"🚨 接続エラー: {e}")
 
-# ====== タブ4：QRコード発行機能 ======
+# ====== タブ4：QRコード発行・テプラ連携 ======
 with tab4:
-    st.subheader("🔲 機器用QRコードの作成")
-    st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
+    st.subheader("🔲 機器用QRコードURLの作成 (テプラ用)")
+    st.write("対象の「ME No.」を入力すると、テプラアプリに貼り付けるための専用URLが作成されます。")
     
-    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）を貼り付けてください", value="ここにアプリのURLを貼り付けてください")
+    # 本番用とデモ用でURLが違うと思うので、適宜書き換えてください
+    base_url = st.text_input("このアプリのURL（ブラウザの上のアドレス）", value="https://miratechryukyu-hash-miratech-app-kiki-nnm67c.streamlit.app")
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: TE-381-001")
     
-    if st.button("QRコードを作成する"):
+    if st.button("テプラ用URLを作成する"):
         if base_url and target_qr_me:
-            if "?" in base_url:
-                 final_url = f"{base_url}&me_no={target_qr_me}&mode=nurse"
-            elif base_url.endswith("/"):
-                final_url = f"{base_url}?me_no={target_qr_me}&mode=nurse"
+            if base_url.endswith("/"):
+                final_url = f"{base_url}?me_no={target_qr_me}"
             else:
-                final_url = f"{base_url}/?me_no={target_qr_me}&mode=nurse"
+                final_url = f"{base_url}/?me_no={target_qr_me}"
             
-            qr = qrcode.QRCode(version=1, box_size=10, border=4)
-            qr.add_data(final_url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
+            st.success(f"「{target_qr_me}」専用のURLができました！")
             
-            buf = BytesIO()
-            img.save(buf, format="PNG")
-            byte_im = buf.getvalue()
+            # ✨ テプラ用にURLをコピーしやすくする機能
+            st.write("👇 右端のコピーボタンを押して、テプラのアプリに貼り付けてください！")
+            st.code(final_url, language="text")
             
-            st.success(f"「{target_qr_me}」専用のQRコードができました！")
-            st.write("※このQRコードを読むと「看護師モード（報告専用画面）」が開きます。")
-            st.image(byte_im, width=200)
-            
-            st.download_button(
-                label="📥 このQRコードを画像として保存",
-                data=byte_im,
-                file_name=f"QR_{target_qr_me}.png",
-                mime="image/png"
-            )
+            # 一応、画面上での確認用にQR画像も小さく出しておきます
+            with st.expander("プレビュー（画像として保存したい場合はこちら）"):
+                qr = qrcode.QRCode(version=1, box_size=10, border=4)
+                qr.add_data(final_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                st.image(byte_im, width=150)
+                st.download_button(
+                    label="📥 画像として保存",
+                    data=byte_im,
+                    file_name=f"QR_{target_qr_me}.png",
+                    mime="image/png"
+                )
         else:
             st.warning("アプリのURLと、ME No.の両方を入力してください。")
 
