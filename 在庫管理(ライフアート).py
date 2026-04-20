@@ -1,73 +1,69 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import os
+from datetime import datetime
 
-# データを保存するCSVファイルの名前
-CSV_FILE = 'inventory.csv'
+st.title('🏥ライフアート 在庫管理 & 履歴ログ')
 
-# 初期データの作成（ファイルがまだない場合のみ実行されます）
-def init_data():
-    if not os.path.exists(CSV_FILE):
-        df = pd.DataFrame({
-            '品名': ['手袋', '消毒液', 'テープ類', 'ガーゼ類', 'マスク'],
-            '在庫数': [100, 10, 30, 200, 150] # 仮の初期在庫
-        })
-        df.to_csv(CSV_FILE, index=False)
+# スプレッドシートへの接続設定
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# CSVから在庫データを読み込む
-def load_data():
-    return pd.read_csv(CSV_FILE)
+# 1. 現在の在庫データの読み込み
+# (スプレッドシートのURLを指定するか、secrets.tomlに設定します)
+df_inventory = conn.read(worksheet="inventory")
 
-# CSVへ在庫データを保存する
-def save_data(df):
-    df.to_csv(CSV_FILE, index=False)
+st.write("### 📦 現在の在庫状況")
+st.dataframe(df_inventory, use_container_width=True)
 
-# メイン画面の構築
-def main():
-    st.title('🏥 訪問看護ステーション 在庫管理')
-    st.caption('プロトタイプ版（CSV保存）')
+st.write("---")
+
+# 2. 入出力フォーム
+st.write("### ✍️ 持ち出し・補充の記録")
+
+item_list = df_inventory['品名'].tolist()
+selected_item = st.selectbox('品名を選択', item_list)
+amount = st.number_input('数量', min_value=1, step=1)
+staff_name = st.text_input('担当者名（新人も入力しやすく）')
+
+col1, col2 = st.columns(2)
+
+# 共通の記録処理関数
+def record_action(item, qty, action_type, staff):
+    # --- 在庫数の更新 ---
+    if action_type == "持ち出し":
+        df_inventory.loc[df_inventory['品名'] == item, '在庫数'] -= qty
+    else:
+        df_inventory.loc[df_inventory['品名'] == item, '在庫数'] += qty
     
-    # データの初期化と読み込み
-    init_data()
-    df = load_data()
+    # 在庫シートを更新
+    conn.update(worksheet="inventory", data=df_inventory)
+    
+    # --- 履歴（ログ）の追記 ---
+    new_log = pd.DataFrame([{
+        "日時": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "担当者": staff,
+        "品名": item,
+        "区分": action_type,
+        "数量": qty
+    }])
+    
+    # 既存のログを読み込んで追記
+    df_logs = conn.read(worksheet="logs")
+    df_logs = pd.concat([df_logs, new_log], ignore_index=True)
+    conn.update(worksheet="logs", data=df_logs)
 
-    # 1. 現在の在庫状況の表示
-    st.write("### 📦 現在の在庫状況")
-    # DataFrameを見やすく表示（コンテナ幅に合わせる）
-    st.dataframe(df, use_container_width=True)
+if col1.button('➖ 持ち出し記録', use_container_width=True):
+    if staff_name:
+        record_action(selected_item, amount, "持ち出し", staff_name)
+        st.success(f'{staff_name}さんが {selected_item} を持ち出しました')
+        st.rerun()
+    else:
+        st.error("担当者名を入力してください")
 
-    st.write("---")
-    
-    # 2. 持ち出し・補充の入力エリア
-    st.write("### ✍️ 持ち出し・補充の入力")
-    
-    # 品名の選択（ドロップダウン）
-    item_list = df['品名'].tolist()
-    selected_item = st.selectbox('品名を選んでください', item_list)
-    
-    # 数量の入力（マイナスにはならないようにmin_value=1を設定）
-    amount = st.number_input('数量', min_value=1, value=1, step=1)
-    
-    # ボタンを横に2つ並べる
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # 持ち出しボタン
-        if st.button('➖ 持ち出し（出庫）', use_container_width=True):
-            # 選んだ品名の在庫数を減らす
-            df.loc[df['品名'] == selected_item, '在庫数'] -= amount
-            save_data(df)
-            st.success(f'{selected_item}を {amount} 個、持ち出しました。')
-            st.rerun() # 画面をリロードして最新の在庫を反映
-            
-    with col2:
-        # 補充ボタン
-        if st.button('➕ 補充（入庫）', use_container_width=True):
-            # 選んだ品名の在庫数を増やす
-            df.loc[df['品名'] == selected_item, '在庫数'] += amount
-            save_data(df)
-            st.success(f'{selected_item}を {amount} 個、補充しました。')
-            st.rerun() # 画面をリロード
-
-if __name__ == '__main__':
-    main()
+if col2.button('➕ 補充記録', use_container_width=True):
+    if staff_name:
+        record_action(selected_item, amount, "補充", staff_name)
+        st.success(f'{selected_item} を補充しました')
+        st.rerun()
+    else:
+        st.error("担当者名を入力してください")
