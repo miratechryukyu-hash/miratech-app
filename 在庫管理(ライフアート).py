@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 JST = timezone(timedelta(hours=+9), 'JST')
 
 st.set_page_config(page_title="miratech在庫管理", layout="centered")
-st.title('🏥ライフアート 在庫管理')
+st.title('🌅ライフアート 在庫管理')
 
 # トースト通知の処理
 if 'toast_msg' in st.session_state:
@@ -35,7 +35,7 @@ if not low_stock_items.empty:
                 st.warning(f"⚠️ **{row['品名']}** 残り {row['在庫数']}個")
 
 st.write("### 📦 現在の在庫状況")
-st.dataframe(df_inventory, use_container_width=True, hide_index=True)
+st.dataframe(df_inventory, hide_index=True)
 st.write("---")
 
 # セッションステート（記憶）の初期化
