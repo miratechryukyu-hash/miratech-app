@@ -3,7 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-st.title('🏥ライフアート 在庫管理 & 履歴ログ')
+st.title('🏥ライフアート 在庫管理')
 
 # スプレッドシートへの接続設定
 conn = st.connection("gsheets", type=GSheetsConnection)
