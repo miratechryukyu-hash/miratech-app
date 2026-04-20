@@ -10,7 +10,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 1. 現在の在庫データの読み込み
 # (スプレッドシートのURLを指定するか、secrets.tomlに設定します)
-df_inventory = conn.read(worksheet="inventory")
+df_inventory = conn.read(worksheet="ライフアート在庫管理")
 
 st.write("### 📦 現在の在庫状況")
 st.dataframe(df_inventory, use_container_width=True)
