@@ -81,23 +81,27 @@ else:
             # スプレッドシートの在庫を一気に更新（1回だけ通信！）
             conn.update(worksheet=SHEET_MAIN, data=df_inventory)
             
-            # 2. ログをまとめて作成する
-            log_entries = []
+           # 2. ログをまとめて作成する（1行に集約バージョン）
             now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
-            for c_item, c_qty in st.session_state.cart.items():
-                log_entries.append({
-                    "日時": now_str,
-                    "担当者": st.session_state.staff_name,
-                    "品名": c_item,
-                    "区分": "持ち出し",
-                    "数量": c_qty
-                })
+            
+            # 「手袋×2、マスク×2」のような1つのテキストにまとめる
+            item_details = "、".join([f"{c_item}×{c_qty}" for c_item, c_qty in st.session_state.cart.items()])
+            # 合計の持ち出し数を計算
+            total_qty = sum(st.session_state.cart.values())
+            
+            log_entries = [{
+                "日時": now_str,
+                "担当者": st.session_state.staff_name,
+                "品名": item_details,  # まとめたテキストを入れる
+                "区分": "一括持ち出し",
+                "数量": total_qty      # 合計数を入れる
+            }]
             
             new_logs_df = pd.DataFrame(log_entries)
             df_logs = conn.read(worksheet=SHEET_LOG)
             df_logs = pd.concat([df_logs, new_logs_df], ignore_index=True)
             
-            # スプレッドシートのログを一気に更新（1回だけ通信！）
+            # スプレッドシートのログを一気に更新
             conn.update(worksheet=SHEET_LOG, data=df_logs)
             
             # カートを空にして通知
