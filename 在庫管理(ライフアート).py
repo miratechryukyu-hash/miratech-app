@@ -35,7 +35,9 @@ if not low_stock_items.empty:
                 st.warning(f"⚠️ **{row['品名']}** 残り {row['在庫数']}個")
 
 st.write("### 📦 現在の在庫状況")
-st.dataframe(df_inventory, hide_index=True)
+col_table, col_space = st.columns([2, 1]) # 画面の幅を 2:1 に分割
+with col_table:
+    st.dataframe(df_inventory, use_container_width=True, hide_index=True)
 st.write("---")
 
 # セッションステート（記憶）の初期化
