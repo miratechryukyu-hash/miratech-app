@@ -38,7 +38,7 @@ if not low_stock_items.empty:
 # ---------------------------------------
 
 st.write("### 📦 現在の在庫状況")
-st.dataframe(df_inventory, use_container_width=True)
+st.dataframe(df_inventory, use_container_width=True, hide_index=True)
 st.write("---")
 
 # セッションステート（記憶）の初期化
