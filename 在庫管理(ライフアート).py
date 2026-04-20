@@ -5,12 +5,14 @@ from datetime import datetime
 
 st.title('🏥ライフアート 在庫管理')
 
-# スプレッドシートへの接続設定
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# --- シート名を変数にして統一しました ---
+SHEET_MAIN = "ライフアート在庫管理"
+SHEET_LOG = "logs"
+
 # 1. 現在の在庫データの読み込み
-# (スプレッドシートのURLを指定するか、secrets.tomlに設定します)
-df_inventory = conn.read(worksheet="ライフアート在庫管理")
+df_inventory = conn.read(worksheet=SHEET_MAIN)
 
 st.write("### 📦 現在の在庫状況")
 st.dataframe(df_inventory, use_container_width=True)
@@ -35,8 +37,8 @@ def record_action(item, qty, action_type, staff):
     else:
         df_inventory.loc[df_inventory['品名'] == item, '在庫数'] += qty
     
-    # 在庫シートを更新
-    conn.update(worksheet="inventory", data=df_inventory)
+    # 在庫シートを更新（修正箇所）
+    conn.update(worksheet=SHEET_MAIN, data=df_inventory)
     
     # --- 履歴（ログ）の追記 ---
     new_log = pd.DataFrame([{
@@ -48,9 +50,9 @@ def record_action(item, qty, action_type, staff):
     }])
     
     # 既存のログを読み込んで追記
-    df_logs = conn.read(worksheet="logs")
+    df_logs = conn.read(worksheet=SHEET_LOG)
     df_logs = pd.concat([df_logs, new_log], ignore_index=True)
-    conn.update(worksheet="logs", data=df_logs)
+    conn.update(worksheet=SHEET_LOG, data=df_logs)
 
 if col1.button('➖ 持ち出し記録', use_container_width=True):
     if staff_name:
