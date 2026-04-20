@@ -14,11 +14,10 @@ SHEET_LOG = "logs"
 # 1. 現在の在庫データの読み込み
 df_inventory = conn.read(worksheet=SHEET_MAIN)
 
-st.write("### 📦 現在の在庫状況")
-st.dataframe(df_inventory, use_container_width=True)
-
-st.write("---")
-
+# ▼▼▼ ここから下の2行を追加 ▼▼▼
+df_inventory = df_inventory.dropna(subset=['品名'])  # スプレッドシートの空の行を無視する
+df_inventory['在庫数'] = pd.to_numeric(df_inventory['在庫数'], errors='coerce').fillna(0).astype(int) # 確実に「数字」に変換する
+# ▲▲▲ 追加ここまで ▲▲▲
 # 2. 入出力フォーム
 # --- 変更前： # 2. 入出力フォーム から下をすべて消して、以下を貼り付けます ---
 
