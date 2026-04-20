@@ -3,7 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-st.title('🏥ライフアート 在庫管理')
+st.title('🌅ライフアート 在庫管理')
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -20,27 +20,30 @@ st.dataframe(df_inventory, use_container_width=True)
 st.write("---")
 
 # 2. 入出力フォーム
-st.write("### ✍️ 持ち出し・補充の記録")
+# --- 変更前： # 2. 入出力フォーム から下をすべて消して、以下を貼り付けます ---
 
-item_list = df_inventory['品名'].tolist()
-selected_item = st.selectbox('品名を選択', item_list)
-amount = st.number_input('数量', min_value=1, step=1)
-staff_name = st.text_input('担当者名（新人も入力しやすく）')
+# 担当者名の記憶（セッションステートの活用）
+if 'staff_name' not in st.session_state:
+    st.session_state.staff_name = ""
 
-col1, col2 = st.columns(2)
+st.write("### ✍️ 担当者")
+# 一度入力すれば、次からは自動で入力された状態になります
+staff_name = st.text_input('あなたのお名前（一度入力すれば記憶されます）', value=st.session_state.staff_name)
+if staff_name != st.session_state.staff_name:
+    st.session_state.staff_name = staff_name
+
+st.write("---")
+st.write("### 🚀 ワンクリック持ち出し（各1個）")
 
 # 共通の記録処理関数
 def record_action(item, qty, action_type, staff):
-    # --- 在庫数の更新 ---
     if action_type == "持ち出し":
         df_inventory.loc[df_inventory['品名'] == item, '在庫数'] -= qty
     else:
         df_inventory.loc[df_inventory['品名'] == item, '在庫数'] += qty
     
-    # 在庫シートを更新（修正箇所）
     conn.update(worksheet=SHEET_MAIN, data=df_inventory)
     
-    # --- 履歴（ログ）の追記 ---
     new_log = pd.DataFrame([{
         "日時": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "担当者": staff,
@@ -49,23 +52,23 @@ def record_action(item, qty, action_type, staff):
         "数量": qty
     }])
     
-    # 既存のログを読み込んで追記
     df_logs = conn.read(worksheet=SHEET_LOG)
     df_logs = pd.concat([df_logs, new_log], ignore_index=True)
     conn.update(worksheet=SHEET_LOG, data=df_logs)
 
-if col1.button('➖ 持ち出し記録', use_container_width=True):
-    if staff_name:
-        record_action(selected_item, amount, "持ち出し", staff_name)
-        st.success(f'{staff_name}さんが {selected_item} を持ち出しました')
-        st.rerun()
-    else:
-        st.error("担当者名を入力してください")
+# 持ち出し用のボタンをアイテムごとに並べる（スマホで見やすいように2列）
+item_list = df_inventory['品名'].tolist()
+cols = st.columns(2)
 
-if col2.button('➕ 補充記録', use_container_width=True):
-    if staff_name:
-        record_action(selected_item, amount, "補充", staff_name)
-        st.success(f'{selected_item} を補充しました')
-        st.rerun()
-    else:
-        st.error("担当者名を入力してください")
+for i, item in enumerate(item_list):
+    # 余りが0なら左の列、1なら右の列にボタンを配置
+    with cols[i % 2]:
+        # 品名ごとにボタンを作成
+        if st.button(f"➖ {item} を1つ持ち出す", key=f"out_{item}", use_container_width=True):
+            if st.session_state.staff_name:
+                record_action(item, 1, "持ち出し", st.session_state.staff_name)
+                # 画面を邪魔しない「トースト通知」でサクッと知らせる
+                st.toast(f"✅ {item}を1つ持ち出しました！")
+                st.rerun()
+            else:
+                st.error("☝️ 上の欄に担当者名を入力してください")
