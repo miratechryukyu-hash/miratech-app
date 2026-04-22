@@ -112,19 +112,17 @@ if st.session_state.get("is_nurse_mode"):
         st.error("⚠️ 機器情報が読み取れません。")
     if st.button("管理者用ログインへ"):
         st.session_state["logged_in_facility"] = None
+        st.session_state["is_nurse_mode"] = False
         st.rerun()
     st.stop()
 
 # ==========================================
 # 👨‍🔧 【ルートB】管理者（安富さん）モード
 # ==========================================
-st.sidebar.title(f"🏢 {facility_name}")
-show_sim = st.sidebar.checkbox("💰 営業用シミュレーターを表示")
+st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理ダッシュボード")
 
-tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"]
-if show_sim: tab_names.append("💰 コストシミュ")
-tabs = st.tabs(tab_names)
+tabs = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
 # ====== タブ1：入力画面 ======
 with tabs[0]:
@@ -149,10 +147,9 @@ with tabs[0]:
         with col_form1: check_date = st.date_input("点検日", date.today())
         with col_form2: me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
-        # ✨【修正ポイント1】AIのデータを確実に反映させるためのキーバインディング
-        if "scan_sn" not in st.session_state:
-            st.session_state["scan_sn"] = ""
-        serial_no = st.text_input("製造番号 (S/N)", key="scan_sn", placeholder="例: 12345678")
+        # ✨【修正完了】エラーの原因だった「key="scan_sn"」を削除し、安全なvalue連携に戻しました！
+        default_sn = st.session_state.get("scan_sn", "")
+        serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
         
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
@@ -301,7 +298,6 @@ with tabs[4]:
         img_file = st.camera_input("銘板（シール）を撮影してください", key="ai_camera")
         
         if img_file:
-            # ✨【修正ポイント2】同じ画像を二度解析しないようにチェック
             current_image_bytes = img_file.getvalue()
             if st.session_state.get("last_scanned_image") != current_image_bytes:
                 with st.spinner("AIが文字を解析しています（約10秒）..."):
@@ -323,43 +319,15 @@ with tabs[4]:
                             st.session_state["scan_sn"] = data.get("serial_number", "")
                             st.session_state["scan_year"] = data.get("manufacture_year", "")
                             
-                            # ✨ 解析した画像を記録して、画面を強制リロード！
                             st.session_state["last_scanned_image"] = current_image_bytes
-                            st.rerun()
+                            st.rerun() # ここで画面を更新し、タブ1の入力欄にデータを反映させます
                         else:
                             st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
                     except Exception as e:
                         st.error(f"🚨 システムエラー: {e}")
             else:
-                # 解析済みの場合は結果だけ表示する（再実行を防ぐ）
                 st.success("✅ 読み取り成功！")
                 st.write(f"**型式:** {st.session_state.get('scan_model', '')}")
                 st.write(f"**製造番号:** {st.session_state.get('scan_sn', '')}")
                 st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
                 st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
-
-# ====== タブ6：コスト削減シミュレーター ======
-if show_sim:
-    with tabs[5]:
-        st.subheader("💰 コスト削減シミュレーター")
-        col_sim1, col_sim2 = st.columns(2)
-        with col_sim1:
-            maker_cost = st.slider("🏢 メーカー修理代 / 1回 (万円)", min_value=1, max_value=30, value=10)
-            miratech_cost = st.slider("🔧 ミラテック琉球 修理代 / 1回 (万円)", min_value=1, max_value=30, value=5)
-            repair_count = st.slider("📅 年間の想定修理件数 (件)", min_value=1, max_value=100, value=12)
-
-        maker_total = maker_cost * repair_count
-        miratech_total = miratech_cost * repair_count
-        savings = maker_total - miratech_total
-
-        with col_sim2:
-            st.info(f"💡 1回あたりの削減額: **{maker_cost - miratech_cost} 万円**")
-            st.success("✨ 年間コスト削減額 ✨")
-            st.markdown(f"<h1 style='text-align: center; color: #ff4b4b; font-size: 3.5rem;'>{savings} 万円</h1>", unsafe_allow_html=True)
-
-        st.markdown("---")
-        df_chart = pd.DataFrame({
-            "プラン": ["メーカーに依頼した場合", "ミラテック琉球に依頼した場合"],
-            "年間コスト (万円)": [maker_total, miratech_total]
-        }).set_index("プラン")
-        st.bar_chart(df_chart, use_container_width=True)
