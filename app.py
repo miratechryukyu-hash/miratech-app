@@ -10,20 +10,26 @@ st.set_page_config(page_title="経営予想診断", page_icon="🏥", layout="wi
 st.markdown("<h1 style='color: #007BFF;'>医療機器資産・寿命最大化診断</h1>", unsafe_allow_html=True)
 st.info("現場の『もったいない』を可視化し、経営変化のシミュレーターです。")
 
-# --- サイドバー：入力エリア ---
+# ==========================================
+# 📊 左側：サイドバー（データ入力）
+# ==========================================
 with st.sidebar:
-    st.header("📊 病院データ入力")
-    pump_total = st.number_input("ポンプ総保有台数", value=100, step=10)
-    nurse_wage = st.number_input("看護師時給 (円)", value=2500, step=100)
+    st.markdown("### 📊 病院データ入力")
+    
+    # ポンプ台数の入力
+    pump_count = st.number_input("ポンプ総保有台数", min_value=1, value=100, step=10)
+    
+    # ✨【変更点】時給の入力をやめ、「トラブル対応にかかる時間」に変更！
+    trouble_time = st.number_input("トラブル1件あたりの対応時間 (分)", min_value=5, max_value=120, value=30, step=5)
     
     st.markdown("---")
-    st.write("🔍 **現場故障件数**")
-    stuck_rate = st.slider("スライド固着を『故障』と誤認する割合 (%)", 0, 50, 15)
-    battery_waste = st.slider("バッテリー不安で『早期廃棄』する割合 (%)", 0, 50, 10)
+    st.markdown("### 🔍 現場の『あるある』率（推定）")
     
-    st.markdown("---")
-    email = st.text_input("診断結果の送付先（メールアドレス）")
-
+    # スライダー
+    slide_error_rate = st.slider("スライド固着を『故障』と誤認する割合 (%)", min_value=0, max_value=100, value=15)
+    battery_error_rate = st.slider("バッテリー不安で『早期廃棄』する割合 (%)", min_value=0, max_value=100, value=10)
+    
+    # ✨【変更点】メールアドレスの入力欄は完全に削除しました！
 # --- 計算ロジック ---
 # 1. 死蔵資産の復活（購入回避）
 recovered_count = int(pump_total * (stuck_rate / 100))
