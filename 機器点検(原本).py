@@ -573,3 +573,45 @@ with tabs[4]:
                         
                 except Exception as e:
                     st.error(f"🚨 システムエラー: {e}")
+
+# ====== タブ6：コスト削減シミュレーター ======
+if show_sim:
+    with tabs[5]:
+        st.subheader("💰 コスト削減シミュレーター")
+        st.write("軽微な修理（バッテリー交換やパッキン交換など）をメーカーではなくミラテック琉球にお任せいただいた場合の、**年間のコスト削減効果**を試算します。")
+
+        col_sim1, col_sim2 = st.columns(2)
+        
+        with col_sim1:
+            st.write("#### ▼ 条件を入力してください")
+            maker_cost = st.slider("🏢 メーカー修理代 / 1回 (万円)", min_value=1, max_value=30, value=10)
+            miratech_cost = st.slider("🔧 ミラテック琉球 修理代 / 1回 (万円)", min_value=1, max_value=30, value=5)
+            repair_count = st.slider("📅 年間の想定修理件数 (件)", min_value=1, max_value=100, value=12)
+
+        maker_total = maker_cost * repair_count
+        miratech_total = miratech_cost * repair_count
+        savings = maker_total - miratech_total
+
+        with col_sim2:
+            st.write("#### ▼ 予想される削減効果")
+            st.info(f"💡 1回あたりの削減額: **{maker_cost - miratech_cost} 万円**")
+            st.success("✨ 年間コスト削減額 ✨")
+            st.markdown(f"<h1 style='text-align: center; color: #ff4b4b; font-size: 3.5rem;'>{savings} 万円</h1>", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.write("### 📊 年間予想コスト比較表")
+
+        df_chart = pd.DataFrame({
+            "プラン": ["メーカーに依頼した場合", "ミラテック琉球に依頼した場合"],
+            "年間コスト (万円)": [maker_total, miratech_total]
+        }).set_index("プラン")
+
+        st.bar_chart(df_chart, use_container_width=True)
+
+        st.write("▼ 詳細データ")
+        df_table = pd.DataFrame({
+            "項目": ["1回あたりのコスト", "想定年間件数", "年間トータルコスト"],
+            "メーカー依頼": [f"{maker_cost} 万円", f"{repair_count} 件", f"{maker_total} 万円"],
+            "ミラテック琉球": [f"{miratech_cost} 万円", f"{repair_count} 件", f"{miratech_total} 万円"]
+        })
+        st.dataframe(df_table, hide_index=True, use_container_width=True)
