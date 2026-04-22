@@ -26,7 +26,7 @@ categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分
 # ==========================================
 def check_password():
     def password_entered():
-        if st.session_state["password"] == st.secrets["4011"]:
+        if st.session_state["4011"] == st.secrets["4011"]:
             st.session_state["password_correct"] = True
             del st.session_state["password"] 
         else:
