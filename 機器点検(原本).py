@@ -141,7 +141,7 @@ st.title("医療機器点検・管理ダッシュボード")
 # タブの生成
 tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"]
 # ====== タブ1：入力画面 ======
-with tabs[0]:
+with tabs[1]:
     device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
     
     scan_model = st.session_state.get("scan_model", "")
