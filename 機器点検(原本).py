@@ -140,7 +140,6 @@ st.title("医療機器点検・管理ダッシュボード")
 
 # タブの生成
 tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"]
-if show_sim:
 
 tabs = st.tabs(tab_names)
 
