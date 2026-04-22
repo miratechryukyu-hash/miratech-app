@@ -88,7 +88,7 @@ ai_model = None
 if "GEMINI_API_KEY" in st.secrets:
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        ai_model = genai.GenerativeModel('gemini-1.5-flash')
+        ai_model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         st.error(f"APIキーの設定エラー: {e}")
 
