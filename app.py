@@ -1,98 +1,107 @@
 import streamlit as st
 import pandas as pd
 
-# ページ設定（画面を広く使う設定）
-st.set_page_config(page_title="miratech 経営診断", layout="wide")
+# ページ設定
+st.set_page_config(page_title="miratech 経営診断プロ", layout="wide")
 
 # ==========================================
-# 📊 左側：サイドバー（データ入力）
+# 📊 左側：サイドバー（病院データ入力）
 # ==========================================
 with st.sidebar:
-    st.markdown("### 📊 病院データ入力")
+    st.header("🏥 病院データ入力")
     
-    pump_total = st.number_input("ポンプ総保有台数", min_value=1, value=100, step=10)
-    trouble_time = st.number_input("トラブル1件あたりの対応時間 (分)", min_value=5, max_value=120, value=30, step=5)
+    # 診断対象の切り替え
+    target_device = st.selectbox(
+        "🔍 診断する機器を選択",
+        ["輸液・シリンジポンプ", "人工呼吸器", "生体情報モニター", "その他"]
+    )
     
     st.markdown("---")
-    st.markdown("### 🔍 現場の『あるある』率（推定）")
     
-    stuck_rate = st.slider("スライド固着を『故障』と誤認する割合 (%)", min_value=0, max_value=100, value=15)
-    battery_rate = st.slider("バッテリー不安で『早期廃棄』する割合 (%)", min_value=0, max_value=100, value=10)
+    # 台数ベースの入力
+    total_units = st.number_input(f"{target_device} 総保有台数", min_value=1, value=100, step=10)
     
-    # 計算エラー防止のため、裏側で固定
-    nurse_wage = 2500
+    st.markdown(f"### 🔍 {target_device} の現状")
+    # %ではなく台数で指定
+    stuck_units = st.slider("軽微な不具合で放置・故障判断されている台数", 0, total_units, int(total_units * 0.15))
+    battery_units = st.slider("バッテリー不安で早期廃棄・更新予定の台数", 0, total_units, int(total_units * 0.10))
+    
+    st.markdown("---")
+    trouble_time = st.number_input("トラブル1件あたりの現場対応時間 (分)", min_value=5, value=30, step=5)
+    
+    # 計算用の裏パラメータ（機器ごとに単価を変える設定）
+    price_map = {
+        "輸液・シリンジポンプ": {"new": 30, "repair": 5}, # 新規30万, 修理5万
+        "人工呼吸器": {"new": 300, "repair": 50},       # 新規300万, 修理50万
+        "生体情報モニター": {"new": 80, "repair": 15},    # 新規80万, 修理15万
+        "その他": {"new": 50, "repair": 10}
+    }
+    unit_price = price_map[target_device]
 
 # ==========================================
-# 📈 上部：ダッシュボード（スクショのカッコいい画面）
+# 📈 メインダッシュボード
 # ==========================================
-st.title("医療機器資産・寿命最大化診断 🏥")
-st.info("現場の『もったいない』を可視化し、経営変化のシミュレーターです。")
+st.title(f"miratech 経営改善シミュレーション")
+st.subheader(f"対象：{target_device}")
 
-# 計算ロジック
-recovered_count = int(pump_total * (stuck_rate / 100))
-# ※利益創出額の簡易シミュレーション計算（新規購入費用およそ30万＋バッテリー交換費用などで換算）
-profit_total = int((recovered_count * 30) + (pump_total * (battery_rate / 100) * 10) + 14) * 10000 # 万単位に調整
-# 時間計算（年間12回のトラブル想定）
-time_saved_hours = int((pump_total * 12 * trouble_time) / 60)
-
-# 3つの大きな数字を表示
-col1, col2, col3 = st.columns(3)
-col1.metric("復活可能台数", f"{recovered_count} 台", "清拭・注油で現役復帰")
-col2.metric("利益創出（推定）", f"¥ {profit_total:,} 円", "購入回避・寿命延長など")
-col3.metric("負担軽減時間", f"{time_saved_hours} 時間/年", "看護師が本来の業務に集中")
-
-# ==========================================
-# ✨ 経営改善シミュレーター（ミラテック導入効果）
-# ==========================================
-st.markdown("---")
-st.subheader("📊 運用コスト・改善シミュレーター")
-
-st.markdown("### 💰 1. 直接コストの削減（修理代・保守代）")
-col_sim1, col_sim2 = st.columns(2)
-
-with col_sim1:
-    st.write("▼ 条件を入力してください")
-    maker_cost = st.slider("🏢 メーカー修理代 / 1回 (万円)", min_value=1, max_value=30, value=10, key="sim_maker")
-    miratech_cost = st.slider("🔧 ミラテック 修理代 / 1回 (万円)", min_value=1, max_value=30, value=5, key="sim_mira")
-    repair_count = st.slider("📅 年間の想定修理件数 (件)", min_value=1, max_value=100, value=12, key="sim_count")
-
-maker_total = maker_cost * repair_count
-miratech_total = miratech_cost * repair_count
-savings = maker_total - miratech_total
-
-with col_sim2:
-    st.write("▼ 予想される削減効果")
-    st.info(f"💡 1回あたりの削減額: **{maker_cost - miratech_cost} 万円**")
-    st.success("✨ 年間コスト削減額 ✨")
-    st.markdown(f"<h1 style='text-align: center; color: #ff4b4b; font-size: 3.5rem;'>{savings} 万円</h1>", unsafe_allow_html=True)
-
-st.markdown("---")
-
-st.markdown("### ⏳ 2. 現場スタッフの時間創出（業務効率化）")
-st.write("機器を探す時間、故障時の報告書作成、業者への電話連絡などにかかる「見えないコスト（時間）」を可視化します。")
-
-col_time1, col_time2 = st.columns(2)
-with col_time1:
-    time_current = st.slider("現状：機器トラブル1件の対応時間 (分)", min_value=5, max_value=120, value=30, step=5, key="time_current")
-    st.caption("※機器探し、紙の報告書作成、引継ぎ、業者手配など")
-    time_miratech = st.slider("導入後：アプリ報告にかかる時間 (分)", min_value=1, max_value=10, value=2, step=1, key="time_miratech")
-    st.caption("※スマホでQR読み込みからワンタッチ送信まで")
-    incident_count = st.slider("年間トラブル・問い合わせ件数 (件)", min_value=10, max_value=500, value=50, step=10, key="incident_count")
+# 計算ロジック（単位を「万円」で統一）
+# 1. 復活可能（新規購入回避）による利益
+profit_recovery = stuck_units * unit_price["new"]
+# 2. 寿命延長（早期廃棄回避）による利益
+profit_battery = battery_units * unit_price["new"]
+# 合計利益
+profit_total_man = profit_recovery + profit_battery
 
 # 時間計算
-time_saved_minutes = (time_current - time_miratech) * incident_count
-time_saved_hours_detail = time_saved_minutes / 60
-shifts_saved = time_saved_hours_detail / 8  # 8時間労働換算
+time_saved_hours = int((total_units * 12 * trouble_time) / 60)
 
-with col_time2:
-    st.success("✨ 年間で生み出される看護時間 ✨")
-    st.markdown(f"<h1 style='text-align: center; color: #00b4d8; font-size: 3.5rem;'>{time_saved_hours_detail:.1f} 時間</h1>", unsafe_allow_html=True)
-    st.info(f"💡 日勤シフト **約 {shifts_saved:.1f} 日分** の労働時間に相当！\n\nこの時間を**患者様へのケア**や、**スタッフの残業削減**に充てることができます。")
-    
+# 表示
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("資産復活（現役復帰）", f"{stuck_units} 台", f"{target_device}")
+    st.caption("清拭・注油・簡易点検で継続使用可能な台数")
+
+with col2:
+    # 単位を「万円」に固定し、大きな数字になりすぎないよう調整
+    st.metric("期待される経営改善効果", f"¥ {profit_total_man:,} 万円", "資産価値の最大化")
+    st.caption("新規購入の抑制および減価償却費の最適化")
+
+with col3:
+    st.metric("現場の創出可能時間", f"{time_saved_hours:,} 時間/年", "働き方改革")
+    st.caption("看護師が本来の業務に集中できる時間")
+
+# ==========================================
+# 💰 運用コスト比較
+# ==========================================
 st.markdown("---")
-st.write("### 📈 導入効果のまとめ")
-df_summary = pd.DataFrame({
-    "指標": ["直接コスト削減", "業務時間の創出", "期待される経営効果"],
-    "効果": [f"年間 {savings}万円", f"年間 {time_saved_hours_detail:.1f}時間", "新規機器購入の原資化、残業代削減、離職率低下"]
-})
-st.dataframe(df_summary, hide_index=True, use_container_width=True)
+st.subheader("🛠️ 具体的コスト削減プラン")
+
+c1, c2 = st.columns(2)
+with c1:
+    maker_cost = st.slider("🏢 メーカー修理代/保守代 (万円)", 1, 100, unit_price["repair"])
+    miratech_cost = st.slider("🔧 ミラテック 修理代/保守代 (万円)", 1, 100, int(unit_price["repair"] * 0.6))
+    annual_cases = st.slider("📅 年間の修理・点検依頼件数 (件)", 1, 200, 20)
+
+    total_m = maker_cost * annual_cases
+    total_mi = miratech_cost * annual_cases
+    diff = total_m - total_mi
+
+with c2:
+    st.info(f"ミラテック琉球への切り替えによる年間削減額")
+    st.markdown(f"<h1 style='color: #ff4b4b; text-align: center;'>¥ {diff:,} 万円</h1>", unsafe_allow_html=True)
+    
+    # グラフ用データ
+    chart_data = pd.DataFrame({
+        "プラン": ["現状 (メーカー等)", "ミラテック導入後"],
+        "コスト (万円)": [total_m, total_mi]
+    }).set_index("プラン")
+    st.bar_chart(chart_data)
+
+# ==========================================
+# 📑 経営報告用サマリー
+# ==========================================
+with st.expander("📝 院長・事務長への提案用データを確認"):
+    st.write(f"今回の診断に基づき、**{target_device}** の管理をミラテック琉球へ委託することで、")
+    st.write(f"1. **資産の有効活用**: 年間 ¥{profit_total_man}万円 相当の新規投資を抑制。")
+    st.write(f"2. **直接コストの適正化**: 外部委託費を年間 ¥{diff}万円 削減。")
+    st.write(f"3. **人的リソースの最適化**: 看護師の雑務時間を年間 {time_saved_hours}時間 削減します。")
