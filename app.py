@@ -4,12 +4,11 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # ページ設定（ブラウザのタブ名やアイコン）
-st.set_page_config(page_title="miratech Ryukyu 経営診断", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="経営診断", page_icon="🏥", layout="wide")
 
 # タイトルと自己紹介
-st.markdown("<h1 style='color: #007BFF;'>🏥 医療機器資産・寿命最大化診断</h1>", unsafe_allow_html=True)
-st.write("### miratech Ryukyu — 臨床工学技士：安富（Sho Yasutomi）")
-st.info("現場の『もったいない』を可視化し、経営を筋肉質に変えるシミュレーターです。")
+st.markdown("<h1 style='color: #007BFF;'>医療機器資産・寿命最大化診断</h1>", unsafe_allow_html=True)
+st.info("現場の『もったいない』を可視化し、経営変化のシミュレーターです。")
 
 # --- サイドバー：入力エリア ---
 with st.sidebar:
