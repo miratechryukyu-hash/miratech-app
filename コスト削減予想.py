@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="ミラテック琉球 コスト削減予想", layout="wide")
+st.set_page_config(page_title="miratech 経営診断プロ", layout="wide")
 
 # ==========================================
 # 📊 左側：サイドバー（病院データ入力）
@@ -23,8 +23,8 @@ with st.sidebar:
     
     st.markdown(f"### 🔍 {target_device} の現状")
     # %ではなく台数で指定
-    stuck_units = st.slider("軽微な不具合で放置・故障判断されている台数", 0, total_units, int(total_units * 0.15))
-    battery_units = st.slider("バッテリー不安で早期廃棄・更新予定の台数", 0, total_units, int(total_units * 0.10))
+    stuck_units = st.slider("軽微な不具合で放置・故障判断されている台数", 0, total_units, 0)
+    battery_units = st.slider("バッテリー不安で早期廃棄・更新予定の台数", 0, total_units, 1)
     
     st.markdown("---")
     trouble_time = st.number_input("トラブル1件あたりの現場対応時間 (分)", min_value=5, value=30, step=5)
@@ -41,7 +41,7 @@ with st.sidebar:
 # ==========================================
 # 📈 メインダッシュボード
 # ==========================================
-st.title(f"ミラテック　コスト削減予想")
+st.title("ミラテック コスト削減予想")
 st.subheader(f"対象：{target_device}")
 
 # 計算ロジック（単位を「万円」で統一）
@@ -52,17 +52,20 @@ profit_battery = battery_units * unit_price["new"]
 # 合計利益
 profit_total_man = profit_recovery + profit_battery
 
+# ✨【修正ポイント】対象となる総台数（固着 + バッテリー）を合算
+total_saved_units = stuck_units + battery_units
+
 # 時間計算
 time_saved_hours = int((total_units * 12 * trouble_time) / 60)
 
 # 表示
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("資産復活（現役復帰）", f"{stuck_units} 台", f"{target_device}")
-    st.caption("清拭・注油・簡易点検で継続使用可能な台数")
+    # ✨【修正ポイント】合計台数を表示し、内訳を小さく表示するように変更
+    st.metric("改善対象（現役復帰＋寿命延長）", f"{total_saved_units} 台", f"内訳: 復活{stuck_units}台 / 延命{battery_units}台")
+    st.caption("清拭・注油やバッテリー交換で継続使用可能な合計台数")
 
 with col2:
-    # 単位を「万円」に固定し、大きな数字になりすぎないよう調整
     st.metric("期待される経営改善効果", f"¥ {profit_total_man:,} 万円", "資産価値の最大化")
     st.caption("新規購入の抑制および減価償却費の最適化")
 
@@ -87,7 +90,7 @@ with c1:
     diff = total_m - total_mi
 
 with c2:
-    st.info(f"ミラテック琉球への切り替えによる年間削減額")
+    st.info("ミラテック琉球への切り替えによる年間削減額")
     st.markdown(f"<h1 style='color: #ff4b4b; text-align: center;'>¥ {diff:,} 万円</h1>", unsafe_allow_html=True)
     
     # グラフ用データ
