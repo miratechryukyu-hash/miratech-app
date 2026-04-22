@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # ページ設定（ブラウザのタブ名やアイコン）
-st.set_page_config(page_title="経営診断", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="経営予想診断", page_icon="🏥", layout="wide")
 
 # タイトルと自己紹介
 st.markdown("<h1 style='color: #007BFF;'>医療機器資産・寿命最大化診断</h1>", unsafe_allow_html=True)
@@ -17,7 +17,7 @@ with st.sidebar:
     nurse_wage = st.number_input("看護師時給 (円)", value=2500, step=100)
     
     st.markdown("---")
-    st.write("🔍 **現場の『あるある』率（推定）**")
+    st.write("🔍 **現場故障件数**")
     stuck_rate = st.slider("スライド固着を『故障』と誤認する割合 (%)", 0, 50, 15)
     battery_waste = st.slider("バッテリー不安で『早期廃棄』する割合 (%)", 0, 50, 10)
     
