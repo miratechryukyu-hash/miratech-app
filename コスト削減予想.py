@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # ページ設定
-st.set_page_config(page_title="ミラテック琉球 経営予想診断", layout="wide")
+st.set_page_config(page_title="ミラテック琉球 コスト削減予想", layout="wide")
 
 # ==========================================
 # 📊 左側：サイドバー（病院データ入力）
