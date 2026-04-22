@@ -38,7 +38,7 @@ time_saved_hours = int((pump_total * 12 * trouble_time) / 60)
 # 3つの大きな数字を表示
 col1, col2, col3 = st.columns(3)
 col1.metric("復活可能台数", f"{recovered_count} 台", "清拭・注油で現役復帰")
-col2.metric("利益創出（推定）", f"¥ {profit_total:,} 万円", "購入回避・寿命延長など")
+col2.metric("利益創出（推定）", f"¥ {profit_total:,} 円", "購入回避・寿命延長など")
 col3.metric("負担軽減時間", f"{time_saved_hours} 時間/年", "看護師が本来の業務に集中")
 
 # ==========================================
