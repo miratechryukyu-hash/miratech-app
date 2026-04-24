@@ -147,7 +147,6 @@ with tabs[0]:
         with col_form1: check_date = st.date_input("点検日", date.today())
         with col_form2: me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
         
-        # ✨【修正完了】エラーの原因だった「key="scan_sn"」を削除し、安全なvalue連携に戻しました！
         default_sn = st.session_state.get("scan_sn", "")
         serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
         
@@ -166,17 +165,49 @@ with tabs[0]:
         else:
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
+                
+                # --- ① 履歴シートへの保存 ---
                 target_sheet = device_category
-                existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                try:
+                    existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                except Exception:
+                    existing_data = pd.DataFrame()
                 
                 data_dict = {"点検日": str(check_date), "ME No.": me_no, "製造番号": serial_no, "製造年": st.session_state.get("scan_year", ""), "機種": f"{device_category}({device_model})", "実施者": inspector, "判定": result, "備考": memo}
                 new_data = pd.DataFrame([data_dict])
                 updated_df = pd.concat([existing_data, new_data], ignore_index=True)
                 conn.update(worksheet=target_sheet, data=updated_df)
                 
-                st.balloons()
-                st.success(f"✅ {me_no} の保存が完了しました！")
+                # --- ② ✨機器マスター台帳の自動更新 ---
+                master_sheet = "機器マスター"
+                try:
+                    master_df = conn.read(worksheet=master_sheet, ttl=0).dropna(how="all")
+                except Exception:
+                    master_df = pd.DataFrame(columns=["ME No.", "カテゴリ", "機種", "製造番号", "製造年", "最終点検日", "最終判定", "最終実施者"])
 
+                new_master_entry = pd.DataFrame([{
+                    "ME No.": me_no,
+                    "カテゴリ": device_category,
+                    "機種": f"{device_category}({device_model})",
+                    "製造番号": serial_no,
+                    "製造年": st.session_state.get("scan_year", ""),
+                    "最終点検日": str(check_date),
+                    "最終判定": result,
+                    "最終実施者": inspector
+                }])
+
+                if not master_df.empty and "ME No." in master_df.columns:
+                    # すでに同じME No.があれば削除（上書きのため）
+                    master_df = master_df[master_df["ME No."].astype(str) != str(me_no)]
+                
+                updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
+                conn.update(worksheet=master_sheet, data=updated_master_df)
+                
+                # 保存完了アクション
+                st.balloons()
+                st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
+
+                # --- QRコード自動生成 ---
                 st.markdown("---")
                 st.subheader(f"🔲 {me_no} 専用QRコード")
                 
@@ -206,12 +237,13 @@ with tabs[0]:
                     st.download_button(label="📥 QRコードを保存", data=byte_im, file_name=f"QR_{me_no}.png", mime="image/png")
 
             except Exception as e:
-                st.error(f"エラー: {e}")
+                st.error(f"エラー: スプレッドシートに「機器マスター」というシートを作成してください。詳細: {e}")
 
 # ====== タブ2：マスター ======
 with tabs[1]:
     st.subheader("🏥 機器マスター")
-    view_cat_master = st.selectbox("📂 読み込むシートを選択", categories_list + ["故障報告"], key="master_cat")
+    # ✨「機器マスター」シートを優先して読み込めるように修正
+    view_cat_master = st.selectbox("📂 読み込むシートを選択", ["機器マスター"] + categories_list + ["故障報告"], key="master_cat")
     if st.button("🔄 台帳を更新する"):
         st.cache_data.clear()
     try:
@@ -222,7 +254,11 @@ with tabs[1]:
         else:
             if view_cat_master == "故障報告":
                 st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
+            elif view_cat_master == "機器マスター":
+                # 機器マスターはそのまま表示（重複なしの最新リストとして）
+                st.dataframe(df, hide_index=True, use_container_width=True)
             else:
+                # 過去の履歴シートの場合は重複を弾いて表示
                 df_master = df.drop_duplicates(subset=["ME No."], keep="last")
                 display_cols = ["ME No.", "製造番号", "点検日", "判定"]
                 existing_cols = [col for col in display_cols if col in df_master.columns]
@@ -320,7 +356,7 @@ with tabs[4]:
                             st.session_state["scan_year"] = data.get("manufacture_year", "")
                             
                             st.session_state["last_scanned_image"] = current_image_bytes
-                            st.rerun() # ここで画面を更新し、タブ1の入力欄にデータを反映させます
+                            st.rerun() 
                         else:
                             st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
                     except Exception as e:
