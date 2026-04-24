@@ -120,7 +120,7 @@ if st.session_state.get("is_nurse_mode"):
 # 👨‍🔧 【ルートB】管理者（安富さん）モード
 # ==========================================
 st.markdown(f"### 🏢 {facility_name}")
-st.title("医療機器点検・管理ダッシュボード")
+st.title("医療機器点検・管理")
 
 tabs = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
