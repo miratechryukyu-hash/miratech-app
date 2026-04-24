@@ -4,9 +4,9 @@ import pandas as pd
 from datetime import date
 import qrcode
 from io import BytesIO
-import google.generativeai as genai  
-import json                                          
-import re                                            
+import google.generativeai as genai
+import json
+import re
 from PIL import Image                                  
 
 # ==========================================
