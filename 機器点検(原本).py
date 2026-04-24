@@ -47,7 +47,7 @@ def check_auth():
 
     st.warning("⚠️ miratech 琉球 医療機器管理システム")
     with st.form("login_form"):
-        input_id = st.text_input("🏢 施設ID")
+        input_id = st.text_input("🏢 施設ID（企業コード）")
         input_pass = st.text_input("🔑 パスワード", type="password")
         if st.form_submit_button("ログイン", use_container_width=True):
             clean_id = input_id.strip()
@@ -152,7 +152,6 @@ with tabs[0]:
         
         st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
         
-        # ✨【復活】詳細チェック項目の変数初期化
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
         chk_op1=chk_op2=chk_op3 = False
@@ -165,7 +164,6 @@ with tabs[0]:
         inc_o_checks = {}
         inc_temp_disp = inc_temp_meas = 36.0
 
-        # ✨【復活】各カテゴリごとの詳細チェックUI
         if device_category == "輸液ポンプ":
             with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
                 st.write("**【外観・作動点検】**")
@@ -334,7 +332,6 @@ with tabs[0]:
                 except Exception:
                     existing_data = pd.DataFrame()
                 
-                # ✨【復活】詳細チェック項目の保存データへの組み込み
                 data_dict = {
                     "点検日": str(check_date), 
                     "ME No.": me_no, 
@@ -553,4 +550,35 @@ with tabs[4]:
         
         if img_file:
             current_image_bytes = img_file.getvalue()
-            if st.session_state.get
+            if st.session_state.get("last_scanned_image") != current_image_bytes:
+                with st.spinner("AIが文字を解析しています（約10秒）..."):
+                    try:
+                        img = Image.open(img_file)
+                        prompt = """
+                        この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
+                        キーは以下のようにしてください:
+                        - model (型式)
+                        - serial_number (製造番号/SN)
+                        - manufacture_year (製造年。例: 2018)
+                        """
+                        response = ai_model.generate_content([prompt, img])
+                        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                        if json_match:
+                            data = json.loads(json_match.group())
+                            
+                            st.session_state["scan_model"] = data.get("model", "")
+                            st.session_state["scan_sn"] = data.get("serial_number", "")
+                            st.session_state["scan_year"] = data.get("manufacture_year", "")
+                            
+                            st.session_state["last_scanned_image"] = current_image_bytes
+                            st.rerun() 
+                        else:
+                            st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
+                    except Exception as e:
+                        st.error(f"🚨 システムエラー: {e}")
+            else:
+                st.success("✅ 読み取り成功！")
+                st.write(f"**型式:** {st.session_state.get('scan_model', '')}")
+                st.write(f"**製造番号:** {st.session_state.get('scan_sn', '')}")
+                st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
+                st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
