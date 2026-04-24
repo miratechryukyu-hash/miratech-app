@@ -472,7 +472,21 @@ with tabs[1]:
             if view_cat_master == "故障報告":
                 st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
             elif view_cat_master == "機器マスター":
-                st.dataframe(df, hide_index=True, use_container_width=True)
+                # ✨【新機能】監査用の自動集計ダッシュボード
+                st.write("### 📊 施設内 機器保有サマリー（監査用）")
+                col_sum1, col_sum2 = st.columns([1, 2])
+                
+                with col_sum1:
+                    # カテゴリごとに台数を自動カウント
+                    if "カテゴリ" in df.columns:
+                        summary_df = df["カテゴリ"].value_counts().reset_index()
+                        summary_df.columns = ["機器の種類", "保有台数"]
+                        st.dataframe(summary_df, hide_index=True, use_container_width=True)
+                        st.info(f"🏥 総保有台数: **{len(df)}** 台")
+                
+                with col_sum2:
+                    st.write("▼ 全機器リスト")
+                    st.dataframe(df, hide_index=True, use_container_width=True)
             else:
                 df_master = df.drop_duplicates(subset=["ME No."], keep="last")
                 display_cols = ["ME No.", "製造番号", "点検日", "判定"]
