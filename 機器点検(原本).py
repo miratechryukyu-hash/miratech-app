@@ -13,7 +13,7 @@ import base64
 # ==========================================
 # ⚙️ 設定：ここを自分のアプリのURLに書き換えてください
 # ==========================================
-APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app/"
+APP_URL = "https://miratech-app-4xydfx4bzmzhqymgpxu8r6.streamlit.app"
 
 # ページ設定
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
