@@ -121,7 +121,7 @@ if st.session_state.get("is_nurse_mode"):
 # 👨‍🔧 【ルートB】管理者（安富さん）モード
 # ==========================================
 st.markdown(f"### 🏢 {facility_name}")
-st.title("医療機器点検・管理")
+st.title("医療機器点検・管理ダッシュボード")
 
 tabs = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
@@ -146,7 +146,7 @@ with tabs[0]:
     with st.form("check_form"):
         col_form1, col_form2 = st.columns(2)
         with col_form1: check_date = st.date_input("点検日", date.today())
-        with col_form2: me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: NT-001")
+        with col_form2: me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: Y0001")
         
         default_sn = st.session_state.get("scan_sn", "")
         serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
@@ -445,23 +445,21 @@ with tabs[0]:
                 img = qr.make_image(fill_color="black", back_color="white")
                 
                 buf = BytesIO()
-            img.save(buf, format="PNG")
-            byte_im = buf.getvalue()
-            
-            # --- 新しいQRコード表示（エラー回避＆ツールチップなし） ---
-            st.success(f"「{me_no}」専用のQRコードができました！")
-            
-            b64 = base64.b64encode(byte_im).decode()
-            html_img = f'''
-            <a href="data:image/png;base64,{b64}" download="QR_{me_no}.png">
-                <img src="data:image/png;base64,{b64}" width="150" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
-            </a>
-            <br>
-            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
-            '''
-            st.markdown(html_img, unsafe_allow_html=True)
+                img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                
+                # ✨ 新しいQRコード表示（エラー回避＆ツールチップなし）
+                b64 = base64.b64encode(byte_im).decode()
+                html_img = f'''
+                <a href="data:image/png;base64,{b64}" download="QR_{me_no}.png">
+                    <img src="data:image/png;base64,{b64}" width="150" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+                </a>
+                <br>
+                <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+                '''
+                st.markdown(html_img, unsafe_allow_html=True)
 
-            except Exception as e:
+            except Exception as e: # ← こいつが消えてた犯人です！
                 st.error(f"エラー: {e}")
 
 # ====== タブ2：マスター ======
@@ -479,12 +477,11 @@ with tabs[1]:
             if view_cat_master == "故障報告":
                 st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
             elif view_cat_master == "機器マスター":
-                # ✨【新機能】監査用の自動集計ダッシュボード
+                # ✨ 監査用の自動集計ダッシュボード
                 st.write("### 📊 施設内 機器保有サマリー（監査用）")
                 col_sum1, col_sum2 = st.columns([1, 2])
                 
                 with col_sum1:
-                    # カテゴリごとに台数を自動カウント
                     if "カテゴリ" in df.columns:
                         summary_df = df["カテゴリ"].value_counts().reset_index()
                         summary_df.columns = ["機器の種類", "保有台数"]
@@ -553,9 +550,9 @@ with tabs[3]:
             img.save(buf, format="PNG")
             byte_im = buf.getvalue()
             
-            # --- 新しいQRコード表示（エラー回避＆ツールチップなし） ---
             st.success(f"「{target_qr_me}」専用のQRコードができました！")
             
+            # ✨ 新しいQRコード表示（エラー回避＆ツールチップなし）
             b64 = base64.b64encode(byte_im).decode()
             html_img = f'''
             <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
@@ -565,6 +562,8 @@ with tabs[3]:
             <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
             '''
             st.markdown(html_img, unsafe_allow_html=True)
+        else:
+            st.warning("ME No.を入力してください。")
 
 # ====== タブ5：AI新規登録ダッシュボード ======
 with tabs[4]:
