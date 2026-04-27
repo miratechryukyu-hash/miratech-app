@@ -8,6 +8,7 @@ import google.generativeai as genai
 import json
 import re
 from PIL import Image
+import base64
 
 # ==========================================
 # ⚙️ 設定：ここを自分のアプリのURLに書き換えてください
@@ -444,15 +445,21 @@ with tabs[0]:
                 img = qr.make_image(fill_color="black", back_color="white")
                 
                 buf = BytesIO()
-                img.save(buf, format="PNG")
-                byte_im = buf.getvalue()
-                
-                col_qr1, col_qr2 = st.columns([1, 2])
-                with col_qr1:
-                    st.image(byte_im, width=150)
-                with col_qr2:
-                    st.write("テプラ等に印刷するためのQRコードが作成されました。")
-                    st.download_button(label="📥 QRコードを保存", data=byte_im, file_name=f"QR_{me_no}.png", mime="image/png")
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            # --- 新しいQRコード表示（エラー回避＆ツールチップなし） ---
+            st.success(f"「{me_no}」専用のQRコードができました！")
+            
+            b64 = base64.b64encode(byte_im).decode()
+            html_img = f'''
+            <a href="data:image/png;base64,{b64}" download="QR_{me_no}.png">
+                <img src="data:image/png;base64,{b64}" width="150" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+            </a>
+            <br>
+            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+            '''
+            st.markdown(html_img, unsafe_allow_html=True)
 
             except Exception as e:
                 st.error(f"エラー: {e}")
@@ -546,11 +553,18 @@ with tabs[3]:
             img.save(buf, format="PNG")
             byte_im = buf.getvalue()
             
+            # --- 新しいQRコード表示（エラー回避＆ツールチップなし） ---
             st.success(f"「{target_qr_me}」専用のQRコードができました！")
-            st.image(byte_im, width=200)
-            st.download_button(label="📥 このQRコードを画像として保存", data=byte_im, file_name=f"QR_{target_qr_me}.png", mime="image/png")
-        else:
-            st.warning("ME No.を入力してください。")
+            
+            b64 = base64.b64encode(byte_im).decode()
+            html_img = f'''
+            <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
+                <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+            </a>
+            <br>
+            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+            '''
+            st.markdown(html_img, unsafe_allow_html=True)
 
 # ====== タブ5：AI新規登録ダッシュボード ======
 with tabs[4]:
