@@ -13,7 +13,7 @@ import base64
 # ==========================================
 # ⚙️ 設定：ここを自分のアプリのURLに書き換えてください
 # ==========================================
-APP_URL = "https://miratech-app-4xydfx4bzmzhqymgpxu8r6.streamlit.app"
+APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app/"
 
 # ページ設定
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
@@ -106,11 +106,56 @@ if st.session_state.get("is_nurse_mode"):
                 err_alarm = st.checkbox("🔔 アラーム")
                 err_drop = st.checkbox("💥 落下・破損")
             rep_detail = st.text_area("詳細内容")
+            
             if st.form_submit_button("📨 報告を送信する", type="primary", use_container_width=True):
-                st.balloons()
-                st.success("✅ 報告を受け付けました。ありがとうございます。")
+                # ✨ 【追加】症状のテキストを自動作成
+                symptoms = []
+                if err_power: symptoms.append("電源不良")
+                if err_error: symptoms.append("エラー表示")
+                if err_alarm: symptoms.append("アラーム")
+                if err_drop: symptoms.append("落下・破損")
+                
+                symptom_str = "、".join(symptoms)
+                if rep_detail:
+                    if symptom_str:
+                        symptom_str += f" (詳細: {rep_detail})"
+                    else:
+                        symptom_str = f"その他 (詳細: {rep_detail})"
+                elif not symptom_str:
+                    symptom_str = "記載なし"
+
+                # ✨ 【追加】スプレッドシートの「故障報告」シートに保存
+                try:
+                    conn = st.connection("gsheets", type=GSheetsConnection)
+                    target_sheet = "故障報告"
+                    
+                    try:
+                        existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                    except Exception:
+                        existing_data = pd.DataFrame(columns=["報告日", "発生日", "ME No.", "機種", "報告者", "部署", "症状", "対応状況"])
+                    
+                    new_report = pd.DataFrame([{
+                        "報告日": str(date.today()),
+                        "発生日": str(rep_date),
+                        "ME No.": url_me_no,
+                        "機種": "不明な機器", # 現場スタッフからは機種がわからないため固定
+                        "報告者": rep_name,
+                        "部署": rep_dept,
+                        "症状": symptom_str,
+                        "対応状況": "未対応"
+                    }])
+                    
+                    updated_df = pd.concat([existing_data, new_report], ignore_index=True)
+                    conn.update(worksheet=target_sheet, data=updated_df)
+                    
+                    st.balloons()
+                    st.success("✅ 報告を受け付けました。ご協力ありがとうございます。")
+                except Exception as e:
+                    st.error(f"保存エラー: スプレッドシートに「故障報告」シートがあるか確認してください。詳細: {e}")
+
     else:
-        st.error("⚠️ 機器情報が読み取れません。")
+        st.error("⚠️ 機器情報が読み取れません。QRコードをもう一度スキャンしてください。")
+        
     if st.button("管理者用ログインへ"):
         st.session_state["logged_in_facility"] = None
         st.session_state["is_nurse_mode"] = False
@@ -121,7 +166,7 @@ if st.session_state.get("is_nurse_mode"):
 # 👨‍🔧 【ルートB】管理者（安富さん）モード
 # ==========================================
 st.markdown(f"### 🏢 {facility_name}")
-st.title("医療機器点検・管理")
+st.title("医療機器点検・管理ダッシュボード")
 
 tabs = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
@@ -448,7 +493,6 @@ with tabs[0]:
                 img.save(buf, format="PNG")
                 byte_im = buf.getvalue()
                 
-                # ✨ 新しいQRコード表示（エラー回避＆ツールチップなし）
                 b64 = base64.b64encode(byte_im).decode()
                 html_img = f'''
                 <a href="data:image/png;base64,{b64}" download="QR_{me_no}.png">
@@ -459,7 +503,7 @@ with tabs[0]:
                 '''
                 st.markdown(html_img, unsafe_allow_html=True)
 
-            except Exception as e: # ← こいつが消えてた犯人です！
+            except Exception as e:
                 st.error(f"エラー: {e}")
 
 # ====== タブ2：マスター ======
@@ -477,8 +521,7 @@ with tabs[1]:
             if view_cat_master == "故障報告":
                 st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
             elif view_cat_master == "機器マスター":
-                # ✨ 監査用の自動集計ダッシュボード
-                st.write("### 📊 施設内 機器保有サマリー")
+                st.write("### 📊 施設内 機器保有サマリー（監査用）")
                 col_sum1, col_sum2 = st.columns([1, 2])
                 
                 with col_sum1:
@@ -532,7 +575,7 @@ with tabs[3]:
         auto_fid = ""
         auto_token = ""
     
-    target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: TE-381-001")
+    target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
     
     if st.button("QRコードを作成する"):
         if APP_URL and target_qr_me and auto_fid and auto_token:
@@ -552,7 +595,6 @@ with tabs[3]:
             
             st.success(f"「{target_qr_me}」専用のQRコードができました！")
             
-            # ✨ 新しいQRコード表示（エラー回避＆ツールチップなし）
             b64 = base64.b64encode(byte_im).decode()
             html_img = f'''
             <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
