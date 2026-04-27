@@ -166,7 +166,7 @@ if st.session_state.get("is_nurse_mode"):
 # 👨‍🔧 【ルートB】管理者（安富さん）モード
 # ==========================================
 st.markdown(f"### 🏢 {facility_name}")
-st.title("医療機器点検・管理ダッシュボード")
+st.title("医療機器点検・管理")
 
 tabs = st.tabs(["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"])
 
@@ -521,7 +521,7 @@ with tabs[1]:
             if view_cat_master == "故障報告":
                 st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
             elif view_cat_master == "機器マスター":
-                st.write("### 📊 施設内 機器保有サマリー（監査用）")
+                st.write("### 📊 施設内 機器保有サマリー")
                 col_sum1, col_sum2 = st.columns([1, 2])
                 
                 with col_sum1:
