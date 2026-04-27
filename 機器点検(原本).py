@@ -478,7 +478,7 @@ with tabs[1]:
                 st.dataframe(df.iloc[::-1], hide_index=True, use_container_width=True)
             elif view_cat_master == "機器マスター":
                 # ✨ 監査用の自動集計ダッシュボード
-                st.write("### 📊 施設内 機器保有サマリー（監査用）")
+                st.write("### 📊 施設内 機器保有サマリー")
                 col_sum1, col_sum2 = st.columns([1, 2])
                 
                 with col_sum1:
