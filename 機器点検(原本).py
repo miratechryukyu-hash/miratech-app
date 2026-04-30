@@ -9,7 +9,8 @@ import json
 import re
 from PIL import Image
 import base64
-＃テスト
+#TESUTO
+
 
 # ==========================================
 # ⚙️ 設定：ここを自分のアプリのURLに書き換えてください
