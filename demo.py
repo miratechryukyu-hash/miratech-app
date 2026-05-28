@@ -91,7 +91,7 @@ def check_auth():
                     if not user_row.empty:
                         user_info = user_row.iloc[0]
                         if str(user_info["パスワード"]) == clean_pass:
-                            if user_info["ステータス"] == "approved":
+                            if user_info["ステータス"] == "OK":
                                 st.session_state["logged_in_facility"] = "miratech 琉球 管理センター" # 仮の施設名
                                 st.session_state["is_nurse_mode"] = False
                                 st.session_state["current_user_name"] = user_info["名前"]
