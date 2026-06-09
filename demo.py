@@ -13,7 +13,7 @@ import base64
 # ==========================================
 # ⚙️ 設定
 # ==========================================
-# ★ 修正ポイント1：URL末尾のスラッシュ「/」を削除してエラーを防止
+# ★URLの最後についていた「/」を削除してエラーを防止
 APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
@@ -52,11 +52,9 @@ def check_auth():
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
-    # すでにログイン済みなら通過
     if st.session_state["logged_in_facility"] is not None:
         return True
 
-    # 1. QRコードからの自動ログイン（現場スタッフ用：足跡は「QR経由」として記録）
     for key in st.secrets.keys():
         try:
             sec_data = st.secrets[key]
@@ -71,7 +69,6 @@ def check_auth():
         except Exception:
             pass
 
-    # 2. 個別IDでのログイン・申請画面（管理者・エンジニア用）
     st.warning("⚠️ miratech 琉球 医療機器管理システム")
     tab1, tab2 = st.tabs(["🔐 ログイン", "📝 新規利用申請"])
 
@@ -87,26 +84,22 @@ def check_auth():
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
                     
-                    clean_db_ids = df_users["ユーザーID"].astype(str).str.replace(".0", "", regex=False).str.strip()
-                    user_row = df_users[clean_db_ids == clean_id]
+                    user_row = df_users[df_users["ユーザーID"].astype(str) == clean_id]
                     
                     if not user_row.empty:
                         user_info = user_row.iloc[0]
-                        saved_pass = str(user_info["パスワード"]).replace(".0", "").strip()
-                        saved_status = str(user_info["ステータス"]).strip()
-                        
-                        if saved_pass == clean_pass:
-                            if saved_status == "OK":
-                                st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
+                        if str(user_info["パスワード"]) == clean_pass:
+                            if user_info["ステータス"] == "OK":
+                                st.session_state["logged_in_facility"] = "miratech 琉球 管理センター" 
                                 st.session_state["is_nurse_mode"] = False
-                                st.session_state["current_user_name"] = str(user_info["名前"]).strip()
-                                st.session_state["is_admin"] = (str(user_info.get("権限")).strip() == "admin")
+                                st.session_state["current_user_name"] = user_info["名前"]
+                                st.session_state["is_admin"] = (user_info.get("権限") == "admin")
                                 
-                                write_log(st.session_state["current_user_name"], "ログインしました")
+                                write_log(user_info["名前"], "ログインしました")
                                 st.rerun()
                                 return True
                             else:
-                                st.warning("⏳ 現在、管理者の承認待ちです。許可が出るまでお待ちください。")
+                                st.warning("⏳ 現在、安富管理者の承認待ちです。許可が出るまでお待ちください。")
                         else:
                             st.error("❌ パスワードが違います。")
                     else:
@@ -154,12 +147,13 @@ def check_auth():
 if not check_auth():
     st.stop()
 
-# --- ★ 修正ポイント2：QRコード用の自動ログインキーを絶対に見つけ出す関数 ---
+# --- ★ QRコード用の自動ログインキーを取得する共通関数 ---
 def get_qr_credentials():
+    # 管理者がQRコードを作る時でも、secretsから自動で施設のキーを探して埋め込む
     for key in st.secrets.keys():
         try:
             sec_data = st.secrets[key]
-            if isinstance(sec_data, dict) and "id_code" in sec_data and "token" in sec_data:
+            if "id_code" in sec_data and "token" in sec_data:
                 return sec_data["id_code"], sec_data["token"]
         except:
             continue
@@ -169,7 +163,7 @@ def get_qr_credentials():
 facility_name = st.session_state["logged_in_facility"]
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
-categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "透視装置","無影灯"]
+categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
 
 # AI設定
 ai_model = None
@@ -284,7 +278,7 @@ with tabs[0]:
         st.info(f"💡 AIが読み取った型式: **{scan_model}**")
 
     if device_category == "輸液ポンプ":
-        device_model = st.selectbox("▼ 型式", ["TE-131A"])
+        device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
     elif device_category == "シリンジポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
     elif device_category == "保育器":
@@ -451,7 +445,7 @@ with tabs[0]:
                             inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                         with o4:
                             inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
-                            inc_o_checks["停電警報"] = st.checkbox("停電警報作作動", value=True)
+                            inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
                             inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
 
                         st.write("**③ 蘇生装置・酸素・外装**")
@@ -559,7 +553,7 @@ with tabs[0]:
                 st.balloons()
                 st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
-                # ★ QRコードの発行を共通関数で安全に生成
+                # ★ QRコードの発行URLを修正（スラッシュ重複とキー抜け漏れ防止）
                 st.markdown("---")
                 st.subheader(f"🔲 {me_no} 専用QRコード")
                 
@@ -705,33 +699,30 @@ with tabs[3]:
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
-            # ★ ここも修正：安全にURLを生成する共通関数を呼び出す
+            # ★ ここも修正：安全にURLを生成
             auto_fid, auto_token = get_qr_credentials()
-            if not auto_fid or not auto_token:
-                st.error("⚠️ システムエラー：secretsファイルに施設の認証情報が見つかりません。")
-            else:
-                final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
-                
-                qr = qrcode.QRCode(version=1, box_size=10, border=4)
-                qr.add_data(final_url)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                
-                buf = BytesIO()
-                img.save(buf, format="PNG")
-                byte_im = buf.getvalue()
-                
-                st.success(f"「{target_qr_me}」専用のQRコードができました！")
-                
-                b64 = base64.b64encode(byte_im).decode()
-                html_img = f'''
-                <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
-                    <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
-                </a>
-                <br>
-                <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
-                '''
-                st.markdown(html_img, unsafe_allow_html=True)
+            final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+            
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(final_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            st.success(f"「{target_qr_me}」専用のQRコードができました！")
+            
+            b64 = base64.b64encode(byte_im).decode()
+            html_img = f'''
+            <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
+                <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+            </a>
+            <br>
+            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+            '''
+            st.markdown(html_img, unsafe_allow_html=True)
         else:
             st.warning("ME No.を入力してください。")
 
