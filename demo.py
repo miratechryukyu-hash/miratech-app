@@ -618,7 +618,7 @@ with tabs[2]:
                     use_container_width=True,
                     hide_index=True,
                     on_select="rerun",
-                    selection_mode="single_row"
+                    selection_mode="single-row"
                 )
                 
                 # 選択された場合の処理
