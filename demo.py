@@ -132,7 +132,7 @@ def check_auth():
                                 "ユーザーID": new_id,
                                 "パスワード": new_pass,
                                 "名前": new_name,
-                                "ステータス": "pending",
+                                "ステータス": "未承認",
                                 "権限": "user"
                             }])
                             updated_users = pd.concat([df_users, new_user], ignore_index=True)
@@ -256,7 +256,7 @@ st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理")
 
 # 管理者のみ「ユーザー管理」タブを表示
-tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴", "🔲 QR発行", "📸 AI登録"]
+tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴・日次実績", "🔲 QR発行", "📸 AI登録"]
 if st.session_state.get("is_admin"):
     tab_names.append("👥 ユーザー・ログ管理")
 
@@ -463,26 +463,44 @@ with tabs[0]:
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 
-                # --- ① 履歴シートへの保存 ---
-                target_sheet = device_category
+                # --- ① 履歴を共通「点検履歴」シートへ一元保存 ---
+                target_sheet = "点検履歴"
                 try:
                     existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
                 except Exception:
-                    existing_data = pd.DataFrame()
+                    existing_data = pd.DataFrame(columns=["点検日", "ME No.", "カテゴリ", "製造番号", "製造年", "機種", "実施者", "判定", "詳細データ", "備考"])
                 
+                # 特有チェック項目をひとつのテキストにまとめる
+                details_list = []
+                if device_category == "輸液ポンプ":
+                    details_list.append(f"汚れ破損:{'〇' if chk_e1 else '×'}, クランプ動作:{'〇' if chk_e3 else '×'}, 流量精度:{flow_acc}ml, 閉塞圧:{occ_press}kpa")
+                elif device_category == "シリンジポンプ":
+                    details_list.append(f"汚れ破損:{'〇' if chk_es1 else '×'}, クランプ動作:{'〇' if chk_es3 else '×'}, 流量精度:{flow_acc}ml, 閉塞圧:{occ_press}kpa")
+                elif device_category == "保育器":
+                    if "閉鎖式" in incubator_type:
+                        c_chk_str = ", ".join([f"{k}:{'〇' if v else '×'}" for k, v in inc_c_checks.items()])
+                        details_list.append(f"閉鎖式 [{c_chk_str}, 表示温度:{inc_temp_disp}℃, 測定温度:{inc_temp_meas}℃]")
+                    else:
+                        o_chk_str = ", ".join([f"{k}:{'〇' if v else '×'}" for k, v in inc_o_checks.items()])
+                        details_list.append(f"開放型 [{o_chk_str}]")
+                else:
+                    details_list.append(f"外装:{exterior_result}, 精度:{detail_result}")
+                
+                detail_text = " / ".join(details_list)
+
                 data_dict = {
                     "点検日": str(check_date), 
                     "ME No.": me_no, 
+                    "カテゴリ": device_category,
                     "製造番号": serial_no, 
                     "製造年": st.session_state.get("scan_year", ""), 
                     "機種": f"{device_category}({device_model})", 
                     "実施者": inspector, 
                     "判定": result, 
+                    "詳細データ": detail_text,
                     "備考": memo
                 }
 
-                # (各機器の詳細データの保存ロジックは文字数削減のためそのまま使用)
-                
                 new_data = pd.DataFrame([data_dict])
                 updated_df = pd.concat([existing_data, new_data], ignore_index=True)
                 conn.update(worksheet=target_sheet, data=updated_df)
@@ -511,16 +529,211 @@ with tabs[0]:
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
                 
-                write_log(inspector, f"{me_no} の点検データを保存")
+                write_log(inspector, f"{me_no} の点検データを統合保存")
                 
                 st.balloons()
                 st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
+                # --- QRコード自動生成 ---
+                st.markdown("---")
+                st.subheader(f"🔲 {me_no} 専用QRコード")
+                
+                f_key = st.session_state.get("facility_key")
+                if f_key and f_key in st.secrets:
+                    fid_code = st.secrets[f_key].get("id_code", "")
+                    tok = st.secrets[f_key].get("token", "")
+                else:
+                    fid_code, tok = "", ""
+
+                final_url = f"{APP_URL}/?fid={fid_code}&key={tok}&me_no={me_no}"
+                
+                qr = qrcode.QRCode(version=1, box_size=10, border=4)
+                qr.add_data(final_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                
+                b64 = base64.b64encode(byte_im).decode()
+                html_img = f'''
+                <a href="data:image/png;base64,{b64}" download="QR_{me_no}.png">
+                    <img src="data:image/png;base64,{b64}" width="150" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+                </a>
+                <br>
+                <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+                '''
+                st.markdown(html_img, unsafe_allow_html=True)
+
             except Exception as e:
                 st.error(f"エラー: {e}")
 
-# ====== タブ2・タブ3・タブ4・タブ5 は既存のまま（省略せずそのまま使用してください） ======
-# ※文字数制限の都合上、コード後半（タブ2〜タブ5）は全く同じなので、ご自身のコードをそのまま残してください！
+# ====== タブ2：マスター ======
+with tabs[1]:
+    st.subheader("🏥 機器マスター")
+    view_cat_master = st.selectbox("📂 読み込むシートを選択", ["機器マスター", "点検履歴", "故障報告"], key="master_cat")
+    if st.button("🔄 台帳を更新する"):
+        st.cache_data.clear()
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all")
+        if df.empty:
+            st.info(f"「{view_cat_master}」シートにはまだデータがありません。")
+        else:
+            st.dataframe(df, hide_index=True, use_container_width=True)
+    except Exception as e:
+        st.error(f"🚨 接続エラー: {e}")
+
+# ====== タブ3：点検履歴・実績（検索＆見える化） ======
+with tabs[2]:
+    st.subheader("🔍 点検履歴の検索 ＆ 日次実績")
+    
+    if st.button("🔄 最新のデータを読み込む", key="refresh_history_tab"):
+        st.cache_data.clear()
+        
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_history = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
+        
+        if df_history.empty:
+            st.info("💡 「点検履歴」シートにデータがまだありません。")
+        else:
+            df_history["ME No."] = df_history["ME No."].astype(str)
+            df_history["点検日"] = df_history["点検日"].astype(str)
+
+            # --- 1. 管理番号（ME No.）での一発検索機能 ---
+            st.markdown("#### 📱 管理番号（ME No.）で一発検索")
+            search_me = st.text_input("🔤 調べたい「ME No.」を入力してください", value=url_me_no, placeholder="例: Y0001")
+            
+            if search_me:
+                filtered_df = df_history[df_history["ME No."].str.contains(search_me, case=False)]
+                st.write(f"「{search_me}」の過去点検データ: {len(filtered_df)} 件")
+                st.dataframe(filtered_df.iloc[::-1], use_container_width=True, hide_index=True)
+            else:
+                st.info("管理番号を入力すると、該当機器の過去の全データが絞り込まれます。")
+
+            st.markdown("---")
+
+            # --- 2. 1日の点検実績（集計表・棒グラフ・特定日内訳） ---
+            st.markdown("#### 📈 日次点検実績（1日の作業量）")
+            
+            daily_counts = df_history["点検日"].value_counts().reset_index()
+            daily_counts.columns = ["点検日", "点検件数（台）"]
+            daily_counts = daily_counts.sort_values("点検日")
+            
+            col_graph, col_table = st.columns([2, 1])
+            
+            with col_graph:
+                st.write("▼ 日別の点検台数グラフ")
+                st.bar_chart(daily_counts, x="点検日", y="点検件数（台）", color="#2e86de")
+                
+            with col_table:
+                st.write("▼ 日付ごとの合計台数")
+                st.dataframe(daily_counts.iloc[::-1], use_container_width=True, hide_index=True)
+
+            st.markdown("##### 📅 特定の日の点検内訳を確認する")
+            target_date = st.date_input("確認したい日付を選択", date.today())
+            
+            day_detail_df = df_history[df_history["点検日"] == str(target_date)]
+            if not day_detail_df.empty:
+                st.success(f"📌 {target_date} は 合計 **{len(day_detail_df)} 台** の点検が完了しています。")
+                st.dataframe(day_detail_df, use_container_width=True, hide_index=True)
+            else:
+                st.info(f"選択された日付（{target_date}）の点検データはありません。")
+
+    except Exception as e:
+        st.error(f"🚨 接続エラー: 「点検履歴」シートがスプレッドシートにあるか確認してください。詳細: {e}")
+
+# ====== タブ4：QRコード発行機能 ======
+with tabs[3]:
+    st.subheader("🔲 機器用QRコードの作成")
+    st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
+    facility_key = st.session_state.get("facility_key")
+    if facility_key and facility_key in st.secrets:
+        sec_data = st.secrets[facility_key]
+        auto_fid = sec_data.get("id_code", "")
+        auto_token = sec_data.get("token", "")
+    else:
+        auto_fid = ""
+        auto_token = ""
+    
+    target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
+    
+    if st.button("QRコードを作成する"):
+        if APP_URL and target_qr_me and auto_fid and auto_token:
+            if APP_URL.endswith("/"):
+                final_url = f"{APP_URL}?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+            else:
+                final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+            
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(final_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            st.success(f"「{target_qr_me}」専用のQRコードができました！")
+            
+            b64 = base64.b64encode(byte_im).decode()
+            html_img = f'''
+            <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
+                <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+            </a>
+            <br>
+            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+            '''
+            st.markdown(html_img, unsafe_allow_html=True)
+        else:
+            st.warning("ME No.を入力してください。")
+
+# ====== タブ5：AI新規登録ダッシュボード ======
+with tabs[4]:
+    st.subheader("📸 AI銘板スキャナー (新規登録用)")
+    st.write("新しい機器の銘板を撮影すると、情報を読み取って「点検入力」タブに自動転送します。")
+    
+    if ai_model is None:
+        st.error("❌ APIキーが設定されていないか、ライブラリのバージョンが古いです。")
+    else:
+        img_file = st.camera_input("銘板（シール）を撮影してください", key="ai_camera")
+        
+        if img_file:
+            current_image_bytes = img_file.getvalue()
+            if st.session_state.get("last_scanned_image") != current_image_bytes:
+                with st.spinner("AIが文字を解析しています（約10秒）..."):
+                    try:
+                        img = Image.open(img_file)
+                        prompt = """
+                        この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
+                        キーは以下のようにしてください:
+                        - model (型式)
+                        - serial_number (製造番号/SN)
+                        - manufacture_year (製造年。例: 2018)
+                        """
+                        response = ai_model.generate_content([prompt, img])
+                        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                        if json_match:
+                            data = json.loads(json_match.group())
+                            
+                            st.session_state["scan_model"] = data.get("model", "")
+                            st.session_state["scan_sn"] = data.get("serial_number", "")
+                            st.session_state["scan_year"] = data.get("manufacture_year", "")
+                            
+                            st.session_state["last_scanned_image"] = current_image_bytes
+                            st.rerun() 
+                        else:
+                            st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
+                    except Exception as e:
+                        st.error(f"🚨 システムエラー: {e}")
+            else:
+                st.success("✅ 読み取り成功！")
+                st.write(f"**型式:** {st.session_state.get('scan_model', '')}")
+                st.write(f"**製造番号:** {st.session_state.get('scan_sn', '')}")
+                st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
+                st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
 
 # ====== 追加：タブ6：ユーザー・ログ管理（管理者のみ） ======
 if st.session_state.get("is_admin"):
@@ -532,7 +745,7 @@ if st.session_state.get("is_admin"):
             df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
             
             st.markdown("#### 👤 承認待ちユーザー")
-            pending_users = df_users[df_users["ステータス"] == "pending"]
+            pending_users = df_users[df_users["ステータス"] == "未承認"]
             if pending_users.empty:
                 st.write("現在、承認待ちのユーザーはいません。")
             else:
@@ -542,11 +755,10 @@ if st.session_state.get("is_admin"):
                         st.write(f"申請者: **{row['名前']}** (ID: {row['ユーザーID']})")
                     with col_u2:
                         if st.button("✅ 承認する", key=f"approve_{row['ユーザーID']}"):
-                            # スプレッドシートの該当行のステータスを更新
-                            df_users.at[index, "ステータス"] = "approved"
+                            df_users.at[index, "ステータス"] = "OK"
                             conn.update(worksheet="ユーザー", data=df_users)
                             write_log("管理者", f"{row['名前']} のアカウントを承認")
-                            st.success(f"{row['名前']} さんを承認しました！")
+                            st.success(f"{row['名前']} さんを承認（OK）しました！")
                             st.rerun()
 
             st.markdown("---")
@@ -557,7 +769,6 @@ if st.session_state.get("is_admin"):
             try:
                 df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all")
                 if not df_logs.empty:
-                    # 最新のログが上に来るように反転して表示
                     st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
                 else:
                     st.write("ログはまだありません。")
