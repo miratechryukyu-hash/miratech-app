@@ -270,7 +270,7 @@ with tabs[0]:
         st.info(f"💡 AIが読み取った型式: **{scan_model}**")
 
     if device_category == "輸液ポンプ":
-        device_model = st.selectbox("▼ 型式", ["TE-131A"])
+        device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
     elif device_category == "シリンジポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
     elif device_category == "保育器":
@@ -450,7 +450,9 @@ with tabs[0]:
             detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
 
         st.markdown("---")
-        inspector = st.text_input("実施者", value=st.session_state.get("current_user_name", ""))
+        # ★ 新機能：点検区分（誰がやったか）を選択できるように追加
+        check_type = st.radio("⚙️ 点検区分", ["院内・ME点検", "メーカー点検", "メーカー修理・校正", "その他外部委託"], horizontal=True)
+        inspector = st.text_input("実施者（自社名、またはメーカー・業者名）", value=st.session_state.get("current_user_name", ""))
         result = st.radio("総合評価", ["使用可", "メーカー修理", "廃棄"], horizontal=True) 
         memo = st.text_area("備考・報告欄")
         
@@ -471,7 +473,7 @@ with tabs[0]:
                     existing_data = pd.DataFrame(columns=["点検日", "ME No.", "カテゴリ", "製造番号", "製造年", "機種", "実施者", "判定", "詳細データ", "備考"])
                 
                 # 特有チェック項目をひとつのテキストにまとめる
-                details_list = []
+                details_list = [f"【{check_type}】"] # ★詳細データの先頭に点検区分を自動で埋め込む
                 if device_category == "輸液ポンプ":
                     details_list.append(f"汚れ破損:{'〇' if chk_e1 else '×'}, クランプ動作:{'〇' if chk_e3 else '×'}, 流量精度:{flow_acc}ml, 閉塞圧:{occ_press}kpa")
                 elif device_category == "シリンジポンプ":
@@ -519,7 +521,7 @@ with tabs[0]:
                     "製造番号": serial_no,
                     "製造年": st.session_state.get("scan_year", ""),
                     "最終点検日": str(check_date),
-                    "最終判定": result,
+                    "最終判定": f"{result}({check_type})", # ★マスターの最終判定にも区分を残す
                     "最終実施者": inspector
                 }])
 
@@ -529,7 +531,7 @@ with tabs[0]:
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
                 
-                write_log(inspector, f"{me_no} の点検データを統合保存")
+                write_log(inspector, f"{me_no} の点検データを統合保存({check_type})")
                 
                 st.balloons()
                 st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
@@ -585,7 +587,7 @@ with tabs[1]:
     except Exception as e:
         st.error(f"🚨 接続エラー: {e}")
 
-# ====== タブ3：機器カルテ・実績（★今回書き換えた部分） ======
+# ====== タブ3：機器カルテ・実績 ======
 with tabs[2]:
     st.subheader("🔍 機器カルテ照合 ＆ 日次実績")
     
@@ -595,7 +597,6 @@ with tabs[2]:
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # エラー回避のため、ファイルがない時の処理を含める
         try:
             df_master = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
         except Exception:
@@ -606,7 +607,6 @@ with tabs[2]:
         except Exception:
             df_history = pd.DataFrame()
 
-        # サブタブで機能をスッキリ分ける
         sub_tab1, sub_tab2 = st.tabs(["📋 機器カルテ（ワンタッチ照合）", "📈 日次点検実績（グラフ）"])
 
         # --- 1. 個体カルテのワンタッチ照合 ---
@@ -621,7 +621,6 @@ with tabs[2]:
                     selection_mode="single-row"
                 )
                 
-                # 選択された場合の処理
                 if len(selection_event.selection.rows) > 0:
                     idx = selection_event.selection.rows[0]
                     target_me = str(df_master.iloc[idx].get("ME No.", ""))
@@ -782,7 +781,7 @@ if st.session_state.get("is_admin"):
             df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
             
             st.markdown("#### 👤 承認待ちユーザー")
-            pending_users = df_users[df_users["ステータス"] == "未承認"]
+            pending_users = df_users[df_users["ステータas"] == "未承認"]
             if pending_users.empty:
                 st.write("現在、承認待ちのユーザーはいません。")
             else:
