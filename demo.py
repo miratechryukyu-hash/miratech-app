@@ -270,7 +270,7 @@ with tabs[0]:
         st.info(f"💡 AIが読み取った型式: **{scan_model}**")
 
     if device_category == "輸液ポンプ":
-        device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
+        device_model = st.selectbox("▼ 型式", ["TE-131A"])
     elif device_category == "シリンジポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
     elif device_category == "保育器":
