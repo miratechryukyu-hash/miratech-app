@@ -814,5 +814,3 @@ if st.session_state.get("is_admin"):
                 
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
-
-```
