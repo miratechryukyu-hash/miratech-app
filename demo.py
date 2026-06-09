@@ -86,22 +86,29 @@ def check_auth():
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
                     
-                    user_row = df_users[df_users["ユーザーID"].astype(str) == clean_id]
+                    # 💡 修正ポイント1：ID検索時に「.0」を消し、空白も削ってから比較する
+                    clean_db_ids = df_users["ユーザーID"].astype(str).str.replace(".0", "", regex=False).str.strip()
+                    user_row = df_users[clean_db_ids == clean_id]
                     
                     if not user_row.empty:
                         user_info = user_row.iloc[0]
-                        if str(user_info["パスワード"]) == clean_pass:
-                            if user_info["ステータス"] == "OK":
-                                st.session_state["logged_in_facility"] = "miratech 琉球 管理センター" # 仮の施設名
+                        
+                        # 💡 修正ポイント2：パスワードとステータスも「.0」や「空白」を消して純粋な文字にして比較
+                        saved_pass = str(user_info["パスワード"]).replace(".0", "").strip()
+                        saved_status = str(user_info["ステータス"]).strip()
+                        
+                        if saved_pass == clean_pass:
+                            if saved_status == "OK":
+                                st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
                                 st.session_state["is_nurse_mode"] = False
-                                st.session_state["current_user_name"] = user_info["名前"]
-                                st.session_state["is_admin"] = (user_info.get("権限") == "admin")
+                                st.session_state["current_user_name"] = str(user_info["名前"]).strip()
+                                st.session_state["is_admin"] = (str(user_info.get("権限")).strip() == "admin")
                                 
-                                write_log(user_info["名前"], "ログインしました")
+                                write_log(st.session_state["current_user_name"], "ログインしました")
                                 st.rerun()
                                 return True
                             else:
-                                st.warning("⏳ 現在、安富管理者の承認待ちです。許可が出るまでお待ちください。")
+                                st.warning("⏳ 現在、管理者の承認待ちです。許可が出るまでお待ちください。")
                         else:
                             st.error("❌ パスワードが違います。")
                     else:
