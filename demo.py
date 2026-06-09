@@ -697,24 +697,31 @@ with tabs[2]:
 with tabs[3]:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
-    facility_key = st.session_state.get("facility_key")
-    if facility_key and facility_key in st.secrets:
-        sec_data = st.secrets[facility_key]
-        auto_fid = sec_data.get("id_code", "")
-        auto_token = sec_data.get("token", "")
-    else:
-        auto_fid = ""
-        auto_token = ""
     
+    # 修正ポイント：secretsに登録されている一番最初の施設情報を強制的に取得する
+    auto_fid = ""
+    auto_token = ""
+    for key in st.secrets.keys():
+        if isinstance(st.secrets[key], dict) and "id_code" in st.secrets[key]:
+            auto_fid = st.secrets[key]["id_code"]
+            auto_token = st.secrets[key]["token"]
+            break # 1つ見つけたらループ終了
+
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
     
     if st.button("QRコードを作成する"):
-        if APP_URL and target_qr_me and auto_fid and auto_token:
+        if not target_qr_me:
+            st.warning("⚠️ ME No.を入力してください。")
+        elif not auto_fid or not auto_token:
+            st.error("⚠️ システムエラー：secretsファイルに施設の認証情報（id_code, token）が見つかりません。")
+        else:
+            # URLの組み立て
             if APP_URL.endswith("/"):
                 final_url = f"{APP_URL}?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
             else:
                 final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
             
+            # QRコード生成
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
             qr.add_data(final_url)
             qr.make(fit=True)
@@ -735,9 +742,7 @@ with tabs[3]:
             <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
             '''
             st.markdown(html_img, unsafe_allow_html=True)
-        else:
-            st.warning("ME No.を入力してください。")
-
+            
 # ====== タブ5：AI新規登録ダッシュボード ======
 with tabs[4]:
     st.subheader("📸 AI銘板スキャナー (新規登録用)")
