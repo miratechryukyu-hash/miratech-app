@@ -13,7 +13,8 @@ import base64
 # ==========================================
 # ⚙️ 設定
 # ==========================================
-APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app/"
+# ★ 修正ポイント1：URL末尾のスラッシュ「/」を削除してエラーを防止
+APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
@@ -86,14 +87,11 @@ def check_auth():
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
                     
-                    # 💡 修正ポイント1：ID検索時に「.0」を消し、空白も削ってから比較する
                     clean_db_ids = df_users["ユーザーID"].astype(str).str.replace(".0", "", regex=False).str.strip()
                     user_row = df_users[clean_db_ids == clean_id]
                     
                     if not user_row.empty:
                         user_info = user_row.iloc[0]
-                        
-                        # 💡 修正ポイント2：パスワードとステータスも「.0」や「空白」を消して純粋な文字にして比較
                         saved_pass = str(user_info["パスワード"]).replace(".0", "").strip()
                         saved_status = str(user_info["ステータス"]).strip()
                         
@@ -155,6 +153,17 @@ def check_auth():
 
 if not check_auth():
     st.stop()
+
+# --- ★ 修正ポイント2：QRコード用の自動ログインキーを絶対に見つけ出す関数 ---
+def get_qr_credentials():
+    for key in st.secrets.keys():
+        try:
+            sec_data = st.secrets[key]
+            if isinstance(sec_data, dict) and "id_code" in sec_data and "token" in sec_data:
+                return sec_data["id_code"], sec_data["token"]
+        except:
+            continue
+    return "", ""
 
 # --- ログイン後の変数 ---
 facility_name = st.session_state["logged_in_facility"]
@@ -230,7 +239,6 @@ if st.session_state.get("is_nurse_mode"):
                     updated_df = pd.concat([existing_data, new_report], ignore_index=True)
                     conn.update(worksheet=target_sheet, data=updated_df)
                     
-                    # ログにも記録
                     write_log(f"現場({rep_name})", f"{url_me_no} の故障報告を送信")
                     
                     st.balloons()
@@ -262,7 +270,6 @@ if st.sidebar.button("ログアウト"):
 st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理")
 
-# 管理者のみ「ユーザー管理」タブを表示
 tab_names = ["📝 点検入力", "📁 マスター", "🔍 機器カルテ・実績", "🔲 QR発行", "📸 AI登録"]
 if st.session_state.get("is_admin"):
     tab_names.append("👥 ユーザー・ログ管理")
@@ -288,7 +295,6 @@ with tabs[0]:
 
     st.markdown("---")
     
-    # ★ ここがポイント：フォームの外に点検区分を出すことで、選んだ瞬間に画面が切り替わる
     check_type = st.radio("⚙️ 点検区分", ["院内・ME点検", "メーカー点検", "メーカー修理・校正", "その他外部委託"], horizontal=True)
     
     with st.form("check_form"):
@@ -299,7 +305,6 @@ with tabs[0]:
         default_sn = st.session_state.get("scan_sn", "")
         serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
         
-        # エラー防止用の変数初期化
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
         chk_op1=chk_op2=chk_op3 = False
@@ -314,7 +319,6 @@ with tabs[0]:
         exterior_result = "異常なし"
         detail_result = ""
 
-        # ★ 院内点検の時だけ細かいチェックリストを表示する
         if check_type == "院内・ME点検":
             st.write(f"### 📋 【{device_category} : {device_model}】専用チェック")
             
@@ -447,7 +451,7 @@ with tabs[0]:
                             inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                         with o4:
                             inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
-                            inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
+                            inc_o_checks["停電警報"] = st.checkbox("停電警報作作動", value=True)
                             inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
 
                         st.write("**③ 蘇生装置・酸素・外装**")
@@ -465,12 +469,10 @@ with tabs[0]:
                 exterior_result = st.radio("外装点検", ["異常なし", "異常あり"], horizontal=True)
                 detail_result = st.text_input("精度チェック（測定値など）", placeholder="例: 換気量 500ml")
         else:
-            # ★ 業者対応の場合はメッセージだけ出して省略する
             st.info("💡 メーカーや外部業者の対応です。細かいチェック入力は省略されます。一番下の「備考・報告欄」に対応内容や報告書No.を記載してください。")
 
         st.markdown("---")
         
-        # 実施者名も、業者対応なら業者名を入れてもらえるように案内
         inspector_label = "実施者（自社名、またはメーカー・業者名）" if check_type != "院内・ME点検" else "実施者"
         inspector = st.text_input(inspector_label, value=st.session_state.get("current_user_name", ""))
         result = st.radio("総合評価", ["使用可", "メーカー修理", "廃棄"], horizontal=True) 
@@ -493,7 +495,6 @@ with tabs[0]:
                 
                 details_list = [f"【{check_type}】"]
                 
-                # ★ 保存時も院内点検の時だけ詳細テキストを組む
                 if check_type == "院内・ME点検":
                     if device_category == "輸液ポンプ":
                         details_list.append(f"汚れ破損:{'〇' if chk_e1 else '×'}, クランプ動作:{'〇' if chk_e3 else '×'}, 流量精度:{flow_acc}ml, 閉塞圧:{occ_press}kpa")
@@ -558,16 +559,11 @@ with tabs[0]:
                 st.balloons()
                 st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
+                # ★ QRコードの発行を共通関数で安全に生成
                 st.markdown("---")
                 st.subheader(f"🔲 {me_no} 専用QRコード")
                 
-                f_key = st.session_state.get("facility_key")
-                if f_key and f_key in st.secrets:
-                    fid_code = st.secrets[f_key].get("id_code", "")
-                    tok = st.secrets[f_key].get("token", "")
-                else:
-                    fid_code, tok = "", ""
-
+                fid_code, tok = get_qr_credentials()
                 final_url = f"{APP_URL}/?fid={fid_code}&key={tok}&me_no={me_no}"
                 
                 qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -705,51 +701,40 @@ with tabs[3]:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
-    # 修正ポイント：secretsに登録されている一番最初の施設情報を強制的に取得する
-    auto_fid = ""
-    auto_token = ""
-    for key in st.secrets.keys():
-        if isinstance(st.secrets[key], dict) and "id_code" in st.secrets[key]:
-            auto_fid = st.secrets[key]["id_code"]
-            auto_token = st.secrets[key]["token"]
-            break # 1つ見つけたらループ終了
-
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
     
     if st.button("QRコードを作成する"):
-        if not target_qr_me:
-            st.warning("⚠️ ME No.を入力してください。")
-        elif not auto_fid or not auto_token:
-            st.error("⚠️ システムエラー：secretsファイルに施設の認証情報（id_code, token）が見つかりません。")
-        else:
-            # URLの組み立て
-            if APP_URL.endswith("/"):
-                final_url = f"{APP_URL}?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+        if target_qr_me:
+            # ★ ここも修正：安全にURLを生成する共通関数を呼び出す
+            auto_fid, auto_token = get_qr_credentials()
+            if not auto_fid or not auto_token:
+                st.error("⚠️ システムエラー：secretsファイルに施設の認証情報が見つかりません。")
             else:
                 final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
-            
-            # QRコード生成
-            qr = qrcode.QRCode(version=1, box_size=10, border=4)
-            qr.add_data(final_url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            buf = BytesIO()
-            img.save(buf, format="PNG")
-            byte_im = buf.getvalue()
-            
-            st.success(f"「{target_qr_me}」専用のQRコードができました！")
-            
-            b64 = base64.b64encode(byte_im).decode()
-            html_img = f'''
-            <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
-                <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
-            </a>
-            <br>
-            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
-            '''
-            st.markdown(html_img, unsafe_allow_html=True)
-            
+                
+                qr = qrcode.QRCode(version=1, box_size=10, border=4)
+                qr.add_data(final_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                
+                st.success(f"「{target_qr_me}」専用のQRコードができました！")
+                
+                b64 = base64.b64encode(byte_im).decode()
+                html_img = f'''
+                <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
+                    <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+                </a>
+                <br>
+                <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+                '''
+                st.markdown(html_img, unsafe_allow_html=True)
+        else:
+            st.warning("ME No.を入力してください。")
+
 # ====== タブ5：AI新規登録ダッシュボード ======
 with tabs[4]:
     st.subheader("📸 AI銘板スキャナー (新規登録用)")
