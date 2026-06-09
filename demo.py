@@ -1,3 +1,8 @@
+承知いたしました！お送りいただいた最新のコードをベースに、「① ワンタッチで機器カルテが出る機能」**と、以前気に入っていただいた**「② 1日の点検台数がわかる日次実績グラフ」の両方を、綺麗に1つのタブにまとめた「完全版」を作成しました。
+
+タブ3（検索タブ）の中に「サブタブ」を作ることで、画面がごちゃごちゃせずに両方の機能を使えるようにしています。以下のコードをすべてコピーして、上書き保存してください。
+
+```python
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
@@ -256,7 +261,7 @@ st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理")
 
 # 管理者のみ「ユーザー管理」タブを表示
-tab_names = ["📝 点検入力", "📁 マスター", "🔍 全履歴・日次実績", "🔲 QR発行", "📸 AI登録"]
+tab_names = ["📝 点検入力", "📁 マスター", "🔍 機器カルテ・実績", "🔲 QR発行", "📸 AI登録"]
 if st.session_state.get("is_admin"):
     tab_names.append("👥 ユーザー・ログ管理")
 
@@ -585,65 +590,102 @@ with tabs[1]:
     except Exception as e:
         st.error(f"🚨 接続エラー: {e}")
 
-# ====== タブ3：点検履歴・実績（検索＆見える化） ======
+# ====== タブ3：機器カルテ・実績（★今回書き換えた部分） ======
 with tabs[2]:
-    st.subheader("🔍 点検履歴の検索 ＆ 日次実績")
+    st.subheader("🔍 機器カルテ照合 ＆ 日次実績")
     
     if st.button("🔄 最新のデータを読み込む", key="refresh_history_tab"):
         st.cache_data.clear()
         
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        df_history = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
         
-        if df_history.empty:
-            st.info("💡 「点検履歴」シートにデータがまだありません。")
-        else:
-            df_history["ME No."] = df_history["ME No."].astype(str)
-            df_history["点検日"] = df_history["点検日"].astype(str)
+        # エラー回避のため、ファイルがない時の処理を含める
+        try:
+            df_master = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+        except Exception:
+            df_master = pd.DataFrame()
+            
+        try:
+            df_history = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
+        except Exception:
+            df_history = pd.DataFrame()
 
-            # --- 1. 管理番号（ME No.）での一発検索機能 ---
-            st.markdown("#### 📱 管理番号（ME No.）で一発検索")
-            search_me = st.text_input("🔤 調べたい「ME No.」を入力してください", value=url_me_no, placeholder="例: Y0001")
-            
-            if search_me:
-                filtered_df = df_history[df_history["ME No."].str.contains(search_me, case=False)]
-                st.write(f"「{search_me}」の過去点検データ: {len(filtered_df)} 件")
-                st.dataframe(filtered_df.iloc[::-1], use_container_width=True, hide_index=True)
-            else:
-                st.info("管理番号を入力すると、該当機器の過去の全データが絞り込まれます。")
+        # サブタブで機能をスッキリ分ける
+        sub_tab1, sub_tab2 = st.tabs(["📋 機器カルテ（ワンタッチ照合）", "📈 日次点検実績（グラフ）"])
 
-            st.markdown("---")
-
-            # --- 2. 1日の点検実績（集計表・棒グラフ・特定日内訳） ---
-            st.markdown("#### 📈 日次点検実績（1日の作業量）")
-            
-            daily_counts = df_history["点検日"].value_counts().reset_index()
-            daily_counts.columns = ["点検日", "点検件数（台）"]
-            daily_counts = daily_counts.sort_values("点検日")
-            
-            col_graph, col_table = st.columns([2, 1])
-            
-            with col_graph:
-                st.write("▼ 日別の点検台数グラフ")
-                st.bar_chart(daily_counts, x="点検日", y="点検件数（台）", color="#2e86de")
+        # --- 1. 個体カルテのワンタッチ照合 ---
+        with sub_tab1:
+            st.write("👇 下の一覧表から、詳細を見たい機器の行をタップ（クリック）してください")
+            if not df_master.empty:
+                selection_event = st.dataframe(
+                    df_master,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single_row"
+                )
                 
-            with col_table:
-                st.write("▼ 日付ごとの合計台数")
-                st.dataframe(daily_counts.iloc[::-1], use_container_width=True, hide_index=True)
-
-            st.markdown("##### 📅 特定の日の点検内訳を確認する")
-            target_date = st.date_input("確認したい日付を選択", date.today())
-            
-            day_detail_df = df_history[df_history["点検日"] == str(target_date)]
-            if not day_detail_df.empty:
-                st.success(f"📌 {target_date} は 合計 **{len(day_detail_df)} 台** の点検が完了しています。")
-                st.dataframe(day_detail_df, use_container_width=True, hide_index=True)
+                # 選択された場合の処理
+                if len(selection_event.selection.rows) > 0:
+                    idx = selection_event.selection.rows[0]
+                    target_me = str(df_master.iloc[idx].get("ME No.", ""))
+                    model_name = df_master.iloc[idx].get("機種", "不明な機器")
+                    
+                    st.markdown("---")
+                    st.markdown(f"<h3 style='color: #2e86de;'>📱 {model_name} (ME No: {target_me}) のカルテ</h3>", unsafe_allow_html=True)
+                    
+                    if not df_history.empty and "ME No." in df_history.columns:
+                        hist_df = df_history[df_history["ME No."].astype(str) == target_me].iloc[::-1]
+                        
+                        if not hist_df.empty:
+                            st.write("#### 📝 過去の点検・修理履歴")
+                            st.dataframe(hist_df, use_container_width=True, hide_index=True)
+                            
+                            last_date = hist_df.iloc[0].get("点検日", "-")
+                            last_result = hist_df.iloc[0].get("判定", "-")
+                            st.success(f"📌 最新の点検日: {last_date} ／ 判定: {last_result}")
+                        else:
+                            st.info("この機器の点検・修理履歴はありません。")
+                    else:
+                        st.info("点検履歴データがありません。")
             else:
-                st.info(f"選択された日付（{target_date}）の点検データはありません。")
+                st.info("💡 機器マスターにまだデータがありません。")
+
+        # --- 2. 1日の点検実績グラフ ---
+        with sub_tab2:
+            if not df_history.empty and "点検日" in df_history.columns:
+                df_history["点検日"] = df_history["点検日"].astype(str)
+                st.markdown("#### 📈 日別点検件数の推移")
+                
+                daily_counts = df_history["点検日"].value_counts().reset_index()
+                daily_counts.columns = ["点検日", "点検件数（台）"]
+                daily_counts = daily_counts.sort_values("点検日")
+                
+                col_graph, col_table = st.columns([2, 1])
+                
+                with col_graph:
+                    st.write("▼ 日別の点検台数グラフ")
+                    st.bar_chart(daily_counts, x="点検日", y="点検件数（台）", color="#2e86de")
+                    
+                with col_table:
+                    st.write("▼ 日付ごとの合計台数")
+                    st.dataframe(daily_counts.iloc[::-1], use_container_width=True, hide_index=True)
+
+                st.markdown("##### 📅 特定の日の点検内訳を確認する")
+                target_date = st.date_input("確認したい日付を選択", date.today())
+                
+                day_detail_df = df_history[df_history["点検日"] == str(target_date)]
+                if not day_detail_df.empty:
+                    st.success(f"📌 {target_date} は 合計 **{len(day_detail_df)} 台** の点検が完了しています。")
+                    st.dataframe(day_detail_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info(f"選択された日付（{target_date}）の点検データはありません。")
+            else:
+                st.info("💡 集計できる点検履歴データがまだありません。")
 
     except Exception as e:
-        st.error(f"🚨 接続エラー: 「点検履歴」シートがスプレッドシートにあるか確認してください。詳細: {e}")
+        st.error(f"🚨 システムエラー: スプレッドシートの設定等を確認してください。詳細: {e}")
 
 # ====== タブ4：QRコード発行機能 ======
 with tabs[3]:
@@ -777,3 +819,5 @@ if st.session_state.get("is_admin"):
                 
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
+
+```
