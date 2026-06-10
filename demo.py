@@ -17,6 +17,14 @@ APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
+# 📝 ゼロ落ち防止用の関数（Googleの自動変換を防ぐ）
+def protect_zeros(val_str):
+    val_str = str(val_str).strip()
+    # すべて数字で、かつ0から始まる場合は、先頭に「'」を付けて強制的に文字化する
+    if val_str.startswith("0") and val_str.isdigit():
+        return f"'{val_str}"
+    return val_str
+
 # --- ログ書き込み用共通関数 ---
 def write_log(user_name, action):
     try:
@@ -294,7 +302,6 @@ with tabs[0]:
             if not matched_sn.empty:
                 master_row = matched_sn.iloc[0]
 
-    # ★ クラッシュ防止用の初期値
     incubator_type = "閉鎖式" 
 
     if master_row is not None:
@@ -318,7 +325,6 @@ with tabs[0]:
         device_model = def_model
         is_registered = True
         
-        # ★ 修正マージ：呼び出した既存機器が「保育器」だった場合も、タイプを選択させてエラーを完全に防ぐ
         if device_category == "保育器":
             incubator_type = st.radio("▼ 保育器のタイプ（点検リスト切り替え用）", ["閉鎖式", "開放型"])
 
@@ -572,11 +578,15 @@ with tabs[0]:
                 
                 detail_text = " / ".join(details_list)
 
+                # 📝 ゼロ落ち防止処理を通す
+                safe_final_me_no = protect_zeros(final_me_no)
+                safe_final_sn = protect_zeros(final_sn)
+
                 data_dict = {
                     "点検日": str(check_date), 
-                    "ME No.": final_me_no, 
+                    "ME No.": safe_final_me_no, 
                     "カテゴリ": device_category,
-                    "製造番号": final_sn, 
+                    "製造番号": safe_final_sn, 
                     "製造年": scan_year_val, 
                     "機種": f"{device_category}({device_model})", 
                     "実施者": inspector, 
@@ -599,10 +609,10 @@ with tabs[0]:
                     st.stop()
 
                 new_master_entry = pd.DataFrame([{
-                    "ME No.": final_me_no,
+                    "ME No.": safe_final_me_no,
                     "カテゴリ": device_category,
                     "機種": f"{device_category}({device_model})",
-                    "製造番号": final_sn,
+                    "製造番号": safe_final_sn,
                     "製造年": scan_year_val,
                     "最終点検日": str(check_date),
                     "最終判定": f"{result}({check_type})",
@@ -610,6 +620,7 @@ with tabs[0]:
                 }])
 
                 if not master_df.empty and "ME No." in master_df.columns:
+                    # 更新時は、生文字（final_me_no）でマッチングさせて古い行を消す
                     master_df = master_df[master_df["ME No."].astype(str) != str(final_me_no)]
                 
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
@@ -723,10 +734,14 @@ with tabs[1]:
                         new_year = st.text_input("製造年", value=str(target_row.get("製造年", "")))
 
                         if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
+                            
+                            # 📝 修正保存時もゼロ落ち防止機能を通す
+                            safe_new_sn = protect_zeros(new_sn)
+
                             # 1. 機器マスターの更新
                             df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "カテゴリ"] = new_cat
                             df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "機種"] = new_model
-                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = new_sn
+                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = safe_new_sn
                             df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造年"] = new_year
                             conn.update(worksheet="機器マスター", data=df_master_edit)
 
@@ -734,7 +749,7 @@ with tabs[1]:
                             try:
                                 df_hist_edit = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
                                 if not df_hist_edit.empty and "ME No." in df_hist_edit.columns:
-                                    df_hist_edit.loc[df_hist_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = new_sn
+                                    df_hist_edit.loc[df_hist_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = safe_new_sn
                                     conn.update(worksheet="点検履歴", data=df_hist_edit)
                             except:
                                 pass # 履歴がなくてもエラーストップしない
