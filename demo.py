@@ -346,7 +346,7 @@ with tabs[0]:
             device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
         elif device_category == "保育器":
             incubator_type = st.radio("▼ 保育器のタイプ", ["閉鎖式", "開放型"])
-            device_model = st.selectbox("▼ 型式", ["V-2100G", "Rabee incu i", "102" ,"V-3200D" , "その他"]) if incubator_type == "閉鎖式" else st.selectbox("▼ 型式", ["V-505", "103HE", "その他"])
+            device_model = st.selectbox("▼ 型式", ["V-2100G", "Rabee incu i", "102", "103" , "V-3200D" , "その他"]) if incubator_type == "閉鎖式" else st.selectbox("▼ 型式", ["V-505", "103HE", "その他"])
         else:
             device_model = st.text_input("▼ 型式を入力してください", value=scan_model_ai)
 
