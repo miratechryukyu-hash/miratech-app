@@ -193,7 +193,8 @@ if st.session_state.get("is_nurse_mode"):
     if url_me_no:
         st.success(f"📱 対象機器: **{url_me_no}**")
         with st.form("nurse_report_form"):
-            rep_date = st.date_input("発生日", date.today())
+            # ★ ここも過去の日付を安全に入力できるように修正
+            rep_date = st.date_input("発生日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
             rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
             rep_name = st.text_input("報告者名")
             c1, c2 = st.columns(2)
@@ -293,7 +294,6 @@ with tabs[0]:
 
     master_row = None
     if input_keyword and not df_master_search.empty:
-        # 💡 ここが修正ポイント①：検索する時だけ、データベース側の見えない「'」を剥がして検索させる！
         clean_db_me = df_master_search["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
         clean_db_sn = df_master_search["製造番号"].astype(str).str.replace("'", "", regex=False).str.strip()
         
@@ -309,7 +309,6 @@ with tabs[0]:
 
     if master_row is not None:
         st.success("📢 登録済みの機器が見つかりました。情報を自動出現させます。")
-        # 💡 ここが修正ポイント②：画面に表示する時も「'」を剥がして綺麗に見せる
         final_me_no = str(master_row.get("ME No.", "")).replace("'", "").strip()
         final_sn = str(master_row.get("製造番号", "")).replace("'", "").strip()
         def_category = str(master_row.get("カテゴリ", "その他")).strip()
@@ -365,10 +364,17 @@ with tabs[0]:
     st.markdown("---")
     check_type = st.radio("⚙️ 点検区分", ["院内・ME点検", "メーカー点検", "メーカー修理・校正", "その他外部委託"], horizontal=True)
     
+    # ★ 連続入力モードのための初期化
+    if "last_check_date" not in st.session_state:
+        st.session_state["last_check_date"] = date.today()
+
     with st.form("check_form"):
         col_form1, col_form2 = st.columns(2)
-        with col_form1: check_date = st.date_input("作業日", date.today())
-        with col_form2: st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}", disabled=True)
+        with col_form1: 
+            # ★ 1950年まで遡れるように制限を解除 ＆ 前回の入力日を記憶して表示！
+            check_date = st.date_input("作業日", value=st.session_state["last_check_date"], min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
+        with col_form2: 
+            st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}", disabled=True)
         
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
@@ -515,7 +521,7 @@ with tabs[0]:
                             inc_o_checks["設定温度警報(マニュアル)"] = st.checkbox("設定温度警報(マニュアル)", value=True)
                             inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                         with o4:
-                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
+                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作作動", value=True)
                             inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
                             inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
 
@@ -622,13 +628,15 @@ with tabs[0]:
                     "最終実施者": inspector
                 }])
 
-                # 💡 ここが修正ポイント③：マスターを上書きする時も「'」を無視して確実に入れ替える
                 if not master_df.empty and "ME No." in master_df.columns:
                     clean_master_df_me = master_df["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
                     master_df = master_df[clean_master_df_me != str(final_me_no).strip()]
                 
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
+                
+                # ★ ここで成功した日付を記憶！次の機器を入力する時に引き継がれます
+                st.session_state["last_check_date"] = check_date
                 
                 write_log(inspector, f"{final_me_no} の点検データを統合保存({check_type})")
                 
@@ -724,7 +732,6 @@ with tabs[1]:
                 df_master_edit = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
 
                 clean_edit_me_no = edit_me_no.strip()
-                # 💡 ここが修正ポイント④：編集時も「'」を剥がして検索させる！
                 master_me_nos = df_master_edit["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
 
                 if not df_master_edit.empty and clean_edit_me_no in master_me_nos.values:
@@ -813,7 +820,6 @@ with tabs[2]:
                     st.markdown(f"<h3 style='color: #2e86de;'>📱 {model_name} (ME No: {target_me}) のカルテ</h3>", unsafe_allow_html=True)
                     
                     if not df_history.empty and "ME No." in df_history.columns:
-                        # 💡 ここが修正ポイント⑤：履歴のカルテ表示でも「'」を剥がしてマッチさせる
                         clean_hist_search_me = df_history["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
                         hist_df = df_history[clean_hist_search_me == target_me].iloc[::-1]
                         
