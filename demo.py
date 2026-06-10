@@ -13,7 +13,6 @@ import base64
 # ==========================================
 # ⚙️ 設定
 # ==========================================
-# ★URLの最後についていた「/」を削除してエラーを防止
 APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
@@ -35,7 +34,7 @@ def write_log(user_name, action):
         updated_logs = pd.concat([df_logs, new_log], ignore_index=True)
         conn.update(worksheet="アクセスログ", data=updated_logs)
     except Exception as e:
-        pass # ログ書き込み失敗でアプリを止めない
+        pass 
 
 # ==========================================
 # 🔐 マルチテナント＆個別IDログイン認証
@@ -84,22 +83,26 @@ def check_auth():
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
                     
-                    user_row = df_users[df_users["ユーザーID"].astype(str) == clean_id]
+                    clean_db_ids = df_users["ユーザーID"].astype(str).str.replace(".0", "", regex=False).str.strip()
+                    user_row = df_users[clean_db_ids == clean_id]
                     
                     if not user_row.empty:
                         user_info = user_row.iloc[0]
-                        if str(user_info["パスワード"]) == clean_pass:
-                            if user_info["ステータス"] == "OK":
-                                st.session_state["logged_in_facility"] = "miratech 琉球 管理センター" 
+                        saved_pass = str(user_info["パスワード"]).replace(".0", "").strip()
+                        saved_status = str(user_info["ステータス"]).strip()
+                        
+                        if saved_pass == clean_pass:
+                            if saved_status == "OK":
+                                st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
                                 st.session_state["is_nurse_mode"] = False
-                                st.session_state["current_user_name"] = user_info["名前"]
-                                st.session_state["is_admin"] = (user_info.get("権限") == "admin")
+                                st.session_state["current_user_name"] = str(user_info["名前"]).strip()
+                                st.session_state["is_admin"] = (str(user_info.get("権限")).strip() == "admin")
                                 
-                                write_log(user_info["名前"], "ログインしました")
+                                write_log(st.session_state["current_user_name"], "ログインしました")
                                 st.rerun()
                                 return True
                             else:
-                                st.warning("⏳ 現在、安富管理者の承認待ちです。許可が出るまでお待ちください。")
+                                st.warning("⏳ 現在、管理者の承認待ちです。許可が出るまでお待ちください。")
                         else:
                             st.error("❌ パスワードが違います。")
                     else:
@@ -147,9 +150,8 @@ def check_auth():
 if not check_auth():
     st.stop()
 
-# --- ★ QRコード用の自動ログインキーを取得する共通関数 ---
+# --- QRコード用の自動ログインキーを取得する共通関数 ---
 def get_qr_credentials():
-    # 管理者がQRコードを作る時でも、secretsから自動で施設のキーを探して埋め込む
     for key in st.secrets.keys():
         try:
             sec_data = st.secrets[key]
@@ -163,7 +165,7 @@ def get_qr_credentials():
 facility_name = st.session_state["logged_in_facility"]
 query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
-categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "その他"]
+categories_list = ["輸液ポンプ", "シリンジポンプ", "保育器", "分娩監視装置", "人工呼吸器", "透視装置","無影灯"]
 
 # AI設定
 ai_model = None
@@ -278,7 +280,7 @@ with tabs[0]:
         st.info(f"💡 AIが読み取った型式: **{scan_model}**")
 
     if device_category == "輸液ポンプ":
-        device_model = st.selectbox("▼ 型式", ["TE-281", "TE-261", "TE-171", "TE-161", "TE-LM830", "OT-707", "OT-818G", "AS-800", "その他"])
+        device_model = st.selectbox("▼ 型式", ["TE-131A"])
     elif device_category == "シリンジポンプ":
         device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
     elif device_category == "保育器":
@@ -553,7 +555,6 @@ with tabs[0]:
                 st.balloons()
                 st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
-                # ★ QRコードの発行URLを修正（スラッシュ重複とキー抜け漏れ防止）
                 st.markdown("---")
                 st.subheader(f"🔲 {me_no} 専用QRコード")
                 
@@ -582,12 +583,46 @@ with tabs[0]:
             except Exception as e:
                 st.error(f"エラー: {e}")
 
-# ====== タブ2：マスター ======
+# ====== タブ2：マスター（★今回書き換えた部分：統計機能を追加） ======
 with tabs[1]:
-    st.subheader("🏥 機器マスター")
-    view_cat_master = st.selectbox("📂 読み込むシートを選択", ["機器マスター", "点検履歴", "故障報告"], key="master_cat")
-    if st.button("🔄 台帳を更新する"):
+    st.subheader("🏥 機器台帳 ＆ 資産台数統計")
+    
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        
+        # 統計用に常に最新の「機器マスター」データを読み込む
+        try:
+            df_m_stats = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+        except:
+            df_m_stats = pd.DataFrame()
+            
+        if not df_m_stats.empty and "カテゴリ" in df_m_stats.columns:
+            st.markdown("#### 📊 現在の院内保有台数サマリー")
+            total_devices = len(df_m_stats)
+            
+            # カテゴリごとに何台あるかを自動集計
+            cat_counts = df_m_stats["カテゴリ"].value_counts().reset_index()
+            cat_counts.columns = ["機器カテゴリー", "保有台数（台）"]
+            cat_counts = cat_counts.sort_values("保有台数（台）", ascending=False)
+            
+            # 画面を2列に分けて、左に数字、右にグラフを表示
+            col_stat1, col_stat2 = st.columns([1, 2])
+            with col_stat1:
+                st.metric("📦 総管理機器数", f"{total_devices} 台")
+                st.dataframe(cat_counts, hide_index=True, use_container_width=True)
+            with col_stat2:
+                # カテゴリ別の保有台数を横棒グラフで視覚化
+                st.bar_chart(cat_counts, x="機器カテゴリー", y="保有台数（台）", color="#ff9f43")
+            st.markdown("---")
+            
+    except Exception as e:
+        st.error(f"🚨 統計データの集計中にエラーが発生しました: {e}")
+        
+    st.markdown("#### 📂 各種シートの詳細表示")
+    view_cat_master = st.selectbox("表示するシートを切り替え", ["機器マスター", "点検履歴", "故障報告"], key="master_cat")
+    if st.button("🔄 台帳データを最新にする"):
         st.cache_data.clear()
+        
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all")
@@ -668,7 +703,7 @@ with tabs[2]:
                 col_graph, col_table = st.columns([2, 1])
                 
                 with col_graph:
-                    st.write("▼ 日別の点検台数グラフ")
+                    st.write("▼ 日別別の点検台数グラフ")
                     st.bar_chart(daily_counts, x="点検日", y="点検件数（台）", color="#2e86de")
                     
                 with col_table:
@@ -699,30 +734,32 @@ with tabs[3]:
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
-            # ★ ここも修正：安全にURLを生成
             auto_fid, auto_token = get_qr_credentials()
-            final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
-            
-            qr = qrcode.QRCode(version=1, box_size=10, border=4)
-            qr.add_data(final_url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            buf = BytesIO()
-            img.save(buf, format="PNG")
-            byte_im = buf.getvalue()
-            
-            st.success(f"「{target_qr_me}」専用のQRコードができました！")
-            
-            b64 = base64.b64encode(byte_im).decode()
-            html_img = f'''
-            <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
-                <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
-            </a>
-            <br>
-            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
-            '''
-            st.markdown(html_img, unsafe_allow_html=True)
+            if not auto_fid or not auto_token:
+                st.error("⚠️ システムエラー：secretsファイルに施設の認証情報が見つかりません。")
+            else:
+                final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+                
+                qr = qrcode.QRCode(version=1, box_size=10, border=4)
+                qr.add_data(final_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                
+                st.success(f"「{target_qr_me}」専用のQRコードができました！")
+                
+                b64 = base64.b64encode(byte_im).decode()
+                html_img = f'''
+                <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
+                    <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+                </a>
+                <br>
+                <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+                '''
+                st.markdown(html_img, unsafe_allow_html=True)
         else:
             st.warning("ME No.を入力してください。")
 
