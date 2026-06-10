@@ -17,7 +17,7 @@ APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
-# 📝 ゼロ落ち防止用の関数
+# 📝 ゼロ落ち防止用の関数（保存時に使用）
 def protect_zeros(val_str):
     val_str = str(val_str).strip()
     if val_str.startswith("0") and val_str.isdigit():
@@ -29,7 +29,6 @@ def write_log(user_name, action):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         try:
-            # nan防止のため .fillna("") を追加
             df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
         except:
             df_logs = pd.DataFrame(columns=["日時", "ユーザー名", "アクション"])
@@ -294,11 +293,15 @@ with tabs[0]:
 
     master_row = None
     if input_keyword and not df_master_search.empty:
-        matched_me = df_master_search[df_master_search["ME No."].astype(str).str.strip() == input_keyword]
+        # 💡 ここが修正ポイント①：検索する時だけ、データベース側の見えない「'」を剥がして検索させる！
+        clean_db_me = df_master_search["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+        clean_db_sn = df_master_search["製造番号"].astype(str).str.replace("'", "", regex=False).str.strip()
+        
+        matched_me = df_master_search[clean_db_me == input_keyword]
         if not matched_me.empty:
             master_row = matched_me.iloc[0]
         else:
-            matched_sn = df_master_search[df_master_search["製造番号"].astype(str).str.strip() == input_keyword]
+            matched_sn = df_master_search[clean_db_sn == input_keyword]
             if not matched_sn.empty:
                 master_row = matched_sn.iloc[0]
 
@@ -306,12 +309,13 @@ with tabs[0]:
 
     if master_row is not None:
         st.success("📢 登録済みの機器が見つかりました。情報を自動出現させます。")
-        final_me_no = str(master_row.get("ME No.", "")).strip()
-        final_sn = str(master_row.get("製造番号", "")).strip()
+        # 💡 ここが修正ポイント②：画面に表示する時も「'」を剥がして綺麗に見せる
+        final_me_no = str(master_row.get("ME No.", "")).replace("'", "").strip()
+        final_sn = str(master_row.get("製造番号", "")).replace("'", "").strip()
         def_category = str(master_row.get("カテゴリ", "その他")).strip()
         full_meshun = str(master_row.get("機種", "")).strip()
         def_model = full_meshun.replace(f"{def_category}(", "").replace(")", "")
-        scan_year_val = str(master_row.get("製造年", "")).strip()
+        scan_year_val = str(master_row.get("製造年", "")).replace("'", "").strip()
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
@@ -578,7 +582,6 @@ with tabs[0]:
                 
                 detail_text = " / ".join(details_list)
 
-                # 📝 ゼロ落ち防止処理を通す
                 safe_final_me_no = protect_zeros(final_me_no)
                 safe_final_sn = protect_zeros(final_sn)
 
@@ -619,8 +622,10 @@ with tabs[0]:
                     "最終実施者": inspector
                 }])
 
+                # 💡 ここが修正ポイント③：マスターを上書きする時も「'」を無視して確実に入れ替える
                 if not master_df.empty and "ME No." in master_df.columns:
-                    master_df = master_df[master_df["ME No."].astype(str).str.strip() != str(final_me_no).strip()]
+                    clean_master_df_me = master_df["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+                    master_df = master_df[clean_master_df_me != str(final_me_no).strip()]
                 
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
@@ -719,7 +724,8 @@ with tabs[1]:
                 df_master_edit = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
 
                 clean_edit_me_no = edit_me_no.strip()
-                master_me_nos = df_master_edit["ME No."].astype(str).str.strip()
+                # 💡 ここが修正ポイント④：編集時も「'」を剥がして検索させる！
+                master_me_nos = df_master_edit["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
 
                 if not df_master_edit.empty and clean_edit_me_no in master_me_nos.values:
                     target_row = df_master_edit[master_me_nos == clean_edit_me_no].iloc[0]
@@ -727,28 +733,27 @@ with tabs[1]:
                     with st.form("edit_master_form"):
                         st.info(f"💡 {clean_edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
                         
-                        new_cat = st.text_input("カテゴリ", value=str(target_row.get("カテゴリ", "")))
-                        new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=str(target_row.get("機種", "")))
-                        new_sn = st.text_input("製造番号 (S/N)", value=str(target_row.get("製造番号", "")))
-                        new_year = st.text_input("製造年", value=str(target_row.get("製造年", "")))
+                        new_cat = st.text_input("カテゴリ", value=str(target_row.get("カテゴリ", "")).replace("'", ""))
+                        new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=str(target_row.get("機種", "")).replace("'", ""))
+                        new_sn = st.text_input("製造番号 (S/N)", value=str(target_row.get("製造番号", "")).replace("'", ""))
+                        new_year = st.text_input("製造年", value=str(target_row.get("製造年", "")).replace("'", ""))
 
                         if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
                             
                             safe_new_sn = protect_zeros(new_sn)
 
-                            # 1. 機器マスターの更新
-                            mask_m = df_master_edit["ME No."].astype(str).str.strip() == clean_edit_me_no
+                            mask_m = master_me_nos == clean_edit_me_no
                             df_master_edit.loc[mask_m, "カテゴリ"] = new_cat
                             df_master_edit.loc[mask_m, "機種"] = new_model
                             df_master_edit.loc[mask_m, "製造番号"] = safe_new_sn
                             df_master_edit.loc[mask_m, "製造年"] = new_year
                             conn.update(worksheet="機器マスター", data=df_master_edit)
 
-                            # 2. ★超重要：点検履歴シートの「すべて」の項目を完璧に同期修正
                             try:
                                 df_hist_edit = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all").fillna("")
                                 if not df_hist_edit.empty and "ME No." in df_hist_edit.columns:
-                                    mask_h = df_hist_edit["ME No."].astype(str).str.strip() == clean_edit_me_no
+                                    clean_hist_me = df_hist_edit["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+                                    mask_h = clean_hist_me == clean_edit_me_no
                                     if mask_h.any():
                                         df_hist_edit.loc[mask_h, "カテゴリ"] = new_cat
                                         df_hist_edit.loc[mask_h, "機種"] = new_model
@@ -758,7 +763,7 @@ with tabs[1]:
                             except Exception as e:
                                 pass 
                             
-                            st.cache_data.clear() # 最新状態を画面に即座に反映させるため
+                            st.cache_data.clear() 
                             st.success(f"✅ {clean_edit_me_no} のデータを最新に修正し、過去の履歴にも完全に同期しました！")
                             write_log(st.session_state.get("current_user_name", "管理者"), f"{clean_edit_me_no} のデータを修正・同期")
                 else:
@@ -801,14 +806,16 @@ with tabs[2]:
                 
                 if len(selection_event.selection.rows) > 0:
                     idx = selection_event.selection.rows[0]
-                    target_me = str(df_master.iloc[idx].get("ME No.", ""))
-                    model_name = df_master.iloc[idx].get("機種", "不明な機器")
+                    target_me = str(df_master.iloc[idx].get("ME No.", "")).replace("'", "").strip()
+                    model_name = str(df_master.iloc[idx].get("機種", "不明な機器")).replace("'", "").strip()
                     
                     st.markdown("---")
                     st.markdown(f"<h3 style='color: #2e86de;'>📱 {model_name} (ME No: {target_me}) のカルテ</h3>", unsafe_allow_html=True)
                     
                     if not df_history.empty and "ME No." in df_history.columns:
-                        hist_df = df_history[df_history["ME No."].astype(str).str.strip() == target_me.strip()].iloc[::-1]
+                        # 💡 ここが修正ポイント⑤：履歴のカルテ表示でも「'」を剥がしてマッチさせる
+                        clean_hist_search_me = df_history["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+                        hist_df = df_history[clean_hist_search_me == target_me].iloc[::-1]
                         
                         if not hist_df.empty:
                             st.write("#### 📝 過去の点検・修理履歴")
