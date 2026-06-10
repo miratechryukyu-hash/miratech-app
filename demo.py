@@ -17,10 +17,9 @@ APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
-# 📝 ゼロ落ち防止用の関数（Googleの自動変換を防ぐ）
+# 📝 ゼロ落ち防止用の関数
 def protect_zeros(val_str):
     val_str = str(val_str).strip()
-    # すべて数字で、かつ0から始まる場合は、先頭に「'」を付けて強制的に文字化する
     if val_str.startswith("0") and val_str.isdigit():
         return f"'{val_str}"
     return val_str
@@ -30,7 +29,8 @@ def write_log(user_name, action):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         try:
-            df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all")
+            # nan防止のため .fillna("") を追加
+            df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
         except:
             df_logs = pd.DataFrame(columns=["日時", "ユーザー名", "アクション"])
         
@@ -89,7 +89,7 @@ def check_auth():
                 
                 try:
                     conn = st.connection("gsheets", type=GSheetsConnection)
-                    df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
+                    df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
                     
                     clean_db_ids = df_users["ユーザーID"].astype(str).str.replace(".0", "", regex=False).str.strip()
                     user_row = df_users[clean_db_ids == clean_id]
@@ -130,7 +130,7 @@ def check_auth():
                     try:
                         conn = st.connection("gsheets", type=GSheetsConnection)
                         try:
-                            df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
+                            df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
                         except:
                             df_users = pd.DataFrame(columns=["ユーザーID", "パスワード", "名前", "ステータス", "権限"])
 
@@ -226,7 +226,7 @@ if st.session_state.get("is_nurse_mode"):
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     target_sheet = "故障報告"
                     try:
-                        existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
+                        existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all").fillna("")
                     except Exception:
                         existing_data = pd.DataFrame(columns=["報告日", "発生日", "ME No.", "機種", "報告者", "部署", "症状", "対応状況"])
                     
@@ -288,7 +288,7 @@ with tabs[0]:
 
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        df_master_search = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+        df_master_search = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
     except:
         df_master_search = pd.DataFrame()
 
@@ -552,9 +552,9 @@ with tabs[0]:
                 try:
                     existing_data = conn.read(worksheet=target_sheet, ttl=0)
                     if existing_data is not None:
-                        existing_data = existing_data.dropna(how="all")
+                        existing_data = existing_data.dropna(how="all").fillna("")
                 except Exception as e:
-                    st.error(f"🚨 「点検履歴」の読み込みに失敗しました（通信制限の可能性があります）。データ保護のため保存を中断しました。1分待ってから再度お試しください。詳細: {e}")
+                    st.error(f"🚨 「点検履歴」の読み込みに失敗しました。詳細: {e}")
                     st.stop()
                 
                 details_list = [f"【{check_type}】"]
@@ -603,9 +603,9 @@ with tabs[0]:
                 try:
                     master_df = conn.read(worksheet=master_sheet, ttl=0)
                     if master_df is not None:
-                        master_df = master_df.dropna(how="all")
+                        master_df = master_df.dropna(how="all").fillna("")
                 except Exception as e:
-                    st.error(f"🚨 「機器マスター」の読み込みに失敗しました。データ保護のため保存を中断しました。詳細: {e}")
+                    st.error(f"🚨 「機器マスター」の読み込みに失敗しました。詳細: {e}")
                     st.stop()
 
                 new_master_entry = pd.DataFrame([{
@@ -620,8 +620,7 @@ with tabs[0]:
                 }])
 
                 if not master_df.empty and "ME No." in master_df.columns:
-                    # 更新時は、生文字（final_me_no）でマッチングさせて古い行を消す
-                    master_df = master_df[master_df["ME No."].astype(str) != str(final_me_no)]
+                    master_df = master_df[master_df["ME No."].astype(str).str.strip() != str(final_me_no).strip()]
                 
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
@@ -663,7 +662,6 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("🏥 機器台帳 ＆ データ管理")
     
-    # サブタブを2つ作って、統計画面と編集画面を分ける
     sub_m1, sub_m2 = st.tabs(["📊 資産統計 ＆ 一覧表示", "✏️ 登録データの修正・変更"])
 
     with sub_m1:
@@ -671,7 +669,7 @@ with tabs[1]:
             conn = st.connection("gsheets", type=GSheetsConnection)
             
             try:
-                df_m_stats = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+                df_m_stats = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
             except:
                 df_m_stats = pd.DataFrame()
                 
@@ -701,7 +699,7 @@ with tabs[1]:
             
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
-            df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all")
+            df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all").fillna("")
             if df.empty:
                 st.info(f"「{view_cat_master}」シートにはまだデータがありません。")
             else:
@@ -709,7 +707,6 @@ with tabs[1]:
         except Exception as e:
             st.error(f"🚨 接続エラー: {e}")
 
-    # 💡 今回追加した「データ修正機能」
     with sub_m2:
         st.markdown("#### ⚙️ 機器データ（シリアル・機種など）の修正")
         st.write("ME No.を入力すると現在のデータが呼び出され、内容を上書き修正できます。")
@@ -719,14 +716,16 @@ with tabs[1]:
         if edit_me_no:
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
-                df_master_edit = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+                df_master_edit = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
 
-                if not df_master_edit.empty and edit_me_no in df_master_edit["ME No."].astype(str).values:
-                    # 該当する機器のデータを抽出
-                    target_row = df_master_edit[df_master_edit["ME No."].astype(str) == edit_me_no].iloc[0]
+                clean_edit_me_no = edit_me_no.strip()
+                master_me_nos = df_master_edit["ME No."].astype(str).str.strip()
+
+                if not df_master_edit.empty and clean_edit_me_no in master_me_nos.values:
+                    target_row = df_master_edit[master_me_nos == clean_edit_me_no].iloc[0]
 
                     with st.form("edit_master_form"):
-                        st.info(f"💡 {edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
+                        st.info(f"💡 {clean_edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
                         
                         new_cat = st.text_input("カテゴリ", value=str(target_row.get("カテゴリ", "")))
                         new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=str(target_row.get("機種", "")))
@@ -735,27 +734,33 @@ with tabs[1]:
 
                         if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
                             
-                            # 📝 修正保存時もゼロ落ち防止機能を通す
                             safe_new_sn = protect_zeros(new_sn)
 
                             # 1. 機器マスターの更新
-                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "カテゴリ"] = new_cat
-                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "機種"] = new_model
-                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = safe_new_sn
-                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造年"] = new_year
+                            mask_m = df_master_edit["ME No."].astype(str).str.strip() == clean_edit_me_no
+                            df_master_edit.loc[mask_m, "カテゴリ"] = new_cat
+                            df_master_edit.loc[mask_m, "機種"] = new_model
+                            df_master_edit.loc[mask_m, "製造番号"] = safe_new_sn
+                            df_master_edit.loc[mask_m, "製造年"] = new_year
                             conn.update(worksheet="機器マスター", data=df_master_edit)
 
-                            # 2. 点検履歴のS/Nも同期して修正（不整合を防ぐ）
+                            # 2. ★超重要：点検履歴シートの「すべて」の項目を完璧に同期修正
                             try:
-                                df_hist_edit = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
+                                df_hist_edit = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all").fillna("")
                                 if not df_hist_edit.empty and "ME No." in df_hist_edit.columns:
-                                    df_hist_edit.loc[df_hist_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = safe_new_sn
-                                    conn.update(worksheet="点検履歴", data=df_hist_edit)
-                            except:
-                                pass # 履歴がなくてもエラーストップしない
-
-                            st.success(f"✅ {edit_me_no} のデータを最新に修正しました！")
-                            write_log(st.session_state.get("current_user_name", "管理者"), f"{edit_me_no} のマスターデータを修正")
+                                    mask_h = df_hist_edit["ME No."].astype(str).str.strip() == clean_edit_me_no
+                                    if mask_h.any():
+                                        df_hist_edit.loc[mask_h, "カテゴリ"] = new_cat
+                                        df_hist_edit.loc[mask_h, "機種"] = new_model
+                                        df_hist_edit.loc[mask_h, "製造番号"] = safe_new_sn
+                                        df_hist_edit.loc[mask_h, "製造年"] = new_year
+                                        conn.update(worksheet="点検履歴", data=df_hist_edit)
+                            except Exception as e:
+                                pass 
+                            
+                            st.cache_data.clear() # 最新状態を画面に即座に反映させるため
+                            st.success(f"✅ {clean_edit_me_no} のデータを最新に修正し、過去の履歴にも完全に同期しました！")
+                            write_log(st.session_state.get("current_user_name", "管理者"), f"{clean_edit_me_no} のデータを修正・同期")
                 else:
                     st.warning("⚠️ 指定された ME No. は登録されていません。")
             except Exception as e:
@@ -772,12 +777,12 @@ with tabs[2]:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
         try:
-            df_master = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+            df_master = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
         except Exception:
             df_master = pd.DataFrame()
             
         try:
-            df_history = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
+            df_history = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all").fillna("")
         except Exception:
             df_history = pd.DataFrame()
 
@@ -803,7 +808,7 @@ with tabs[2]:
                     st.markdown(f"<h3 style='color: #2e86de;'>📱 {model_name} (ME No: {target_me}) のカルテ</h3>", unsafe_allow_html=True)
                     
                     if not df_history.empty and "ME No." in df_history.columns:
-                        hist_df = df_history[df_history["ME No."].astype(str) == target_me].iloc[::-1]
+                        hist_df = df_history[df_history["ME No."].astype(str).str.strip() == target_me.strip()].iloc[::-1]
                         
                         if not hist_df.empty:
                             st.write("#### 📝 過去の点検・修理履歴")
@@ -943,7 +948,7 @@ if st.session_state.get("is_admin"):
         
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
-            df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all")
+            df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
             
             st.markdown("#### 👤 承認待ちユーザー")
             pending_users = df_users[df_users["ステータス"] == "未承認"]
@@ -968,7 +973,7 @@ if st.session_state.get("is_admin"):
                 st.cache_data.clear()
             
             try:
-                df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all")
+                df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
                 if not df_logs.empty:
                     st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
                 else:
