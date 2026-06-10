@@ -166,7 +166,7 @@ query_params = st.query_params
 url_me_no = query_params.get("me_no", "")
 categories_list = ["輸液ポンプ", "顕微鏡", "保育器", "分娩監視装置", "ネブライザー", "透視装置","無影灯","血圧計","超音波診断装置",
                    "ドプラ","検診台","血液ガス分析装置","吸引器類","加湿器類","分娩台","ベビーコット","哺乳瓶消毒器","煮沸消毒器","パルスオキシメーター",
-                   "聴力検査器","光線治療器","酸素モニタ","電気メス","麻酔器","生体情報モニタ","手術台","子宮鏡","滅菌装置"]
+                   "聴力検査器","光線治療器","酸素モニタ","電気メス","麻酔器","生体情報モニタ","手術台","子宮鏡","滅菌装置", "その他"]
 
 # AI設定
 ai_model = None
@@ -275,7 +275,6 @@ tabs = st.tabs(tab_names)
 
 # ====== タブ1：入力画面 ======
 with tabs[0]:
-    # 💡 改良ポイント：S/N または ME No のハイブリッド検索窓
     default_search_val = url_me_no if url_me_no else st.session_state.get("scan_sn", "")
     input_keyword = st.text_input("🔍 ME No. または 製造番号(S/N) を入力して検索", value=default_search_val, placeholder="例: Y0001 または 12345678").strip()
 
@@ -287,17 +286,17 @@ with tabs[0]:
 
     master_row = None
     if input_keyword and not df_master_search.empty:
-        # ① まず ME No. で検索
         matched_me = df_master_search[df_master_search["ME No."].astype(str).str.strip() == input_keyword]
         if not matched_me.empty:
             master_row = matched_me.iloc[0]
         else:
-            # ② なければ 製造番号(S/N) で検索
             matched_sn = df_master_search[df_master_search["製造番号"].astype(str).str.strip() == input_keyword]
             if not matched_sn.empty:
                 master_row = matched_sn.iloc[0]
 
-    # 検索結果に応じて画面を切り替え
+    # ★ クラッシュ防止用の初期値
+    incubator_type = "閉鎖式" 
+
     if master_row is not None:
         st.success("📢 登録済みの機器が見つかりました。情報を自動出現させます。")
         final_me_no = str(master_row.get("ME No.", "")).strip()
@@ -307,7 +306,6 @@ with tabs[0]:
         def_model = full_meshun.replace(f"{def_category}(", "").replace(")", "")
         scan_year_val = str(master_row.get("製造年", "")).strip()
         
-        # ロックされた状態で情報を表示
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             st.text_input("▼ ME No.", value=final_me_no, disabled=True)
@@ -319,15 +317,18 @@ with tabs[0]:
         device_category = def_category
         device_model = def_model
         is_registered = True
+        
+        # ★ 修正マージ：呼び出した既存機器が「保育器」だった場合も、タイプを選択させてエラーを完全に防ぐ
+        if device_category == "保育器":
+            incubator_type = st.radio("▼ 保育器のタイプ（点検リスト切り替え用）", ["閉鎖式", "開放型"])
+
     else:
         is_registered = False
         if input_keyword:
             st.info("💡 新規登録の機器です。以下に必要な情報を入力してください。")
 
-        # 新規登録時の手動入力フィールド
         col_new1, col_new2 = st.columns(2)
         with col_new1:
-            # QRからの遷移ならME Noに入れる。それ以外はS/Nにデフォルト値を入れる。
             init_me = url_me_no if url_me_no else ""
             init_sn = st.session_state.get("scan_sn", "") if not url_me_no else ""
             final_me_no = st.text_input("▼ ME No. (新規登録)", value=init_me, placeholder="例: Y0001")
@@ -649,49 +650,101 @@ with tabs[0]:
 
 # ====== タブ2：マスター ======
 with tabs[1]:
-    st.subheader("🏥 機器台帳 ＆ 資産台数統計")
+    st.subheader("🏥 機器台帳 ＆ データ管理")
     
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
+    # サブタブを2つ作って、統計画面と編集画面を分ける
+    sub_m1, sub_m2 = st.tabs(["📊 資産統計 ＆ 一覧表示", "✏️ 登録データの修正・変更"])
+
+    with sub_m1:
         try:
-            df_m_stats = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
-        except:
-            df_m_stats = pd.DataFrame()
+            conn = st.connection("gsheets", type=GSheetsConnection)
             
-        if not df_m_stats.empty and "カテゴリ" in df_m_stats.columns:
-            st.markdown("#### 📊 現在の院内保有台数サマリー")
-            total_devices = len(df_m_stats)
+            try:
+                df_m_stats = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+            except:
+                df_m_stats = pd.DataFrame()
+                
+            if not df_m_stats.empty and "カテゴリ" in df_m_stats.columns:
+                st.markdown("#### 📊 現在の院内保有台数サマリー")
+                total_devices = len(df_m_stats)
+                
+                cat_counts = df_m_stats["カテゴリ"].value_counts().reset_index()
+                cat_counts.columns = ["機器カテゴリー", "保有台数（台）"]
+                cat_counts = cat_counts.sort_values("保有台数（台）", ascending=False)
+                
+                col_stat1, col_stat2 = st.columns([1, 2])
+                with col_stat1:
+                    st.metric("📦 総管理機器数", f"{total_devices} 台")
+                    st.dataframe(cat_counts, hide_index=True, use_container_width=True)
+                with col_stat2:
+                    st.bar_chart(cat_counts, x="機器カテゴリー", y="保有台数（台）", color="#ff9f43")
+                st.markdown("---")
+                
+        except Exception as e:
+            st.error(f"🚨 統計データの集計中にエラーが発生しました: {e}")
             
-            cat_counts = df_m_stats["カテゴリ"].value_counts().reset_index()
-            cat_counts.columns = ["機器カテゴリー", "保有台数（台）"]
-            cat_counts = cat_counts.sort_values("保有台数（台）", ascending=False)
+        st.markdown("#### 📂 各種シートの詳細表示")
+        view_cat_master = st.selectbox("表示するシートを切り替え", ["機器マスター", "点検履歴", "故障報告"], key="master_cat")
+        if st.button("🔄 台帳データを最新にする"):
+            st.cache_data.clear()
             
-            col_stat1, col_stat2 = st.columns([1, 2])
-            with col_stat1:
-                st.metric("📦 総管理機器数", f"{total_devices} 台")
-                st.dataframe(cat_counts, hide_index=True, use_container_width=True)
-            with col_stat2:
-                st.bar_chart(cat_counts, x="機器カテゴリー", y="保有台数（台）", color="#ff9f43")
-            st.markdown("---")
-            
-    except Exception as e:
-        st.error(f"🚨 統計データの集計中にエラーが発生しました: {e}")
-        
-    st.markdown("#### 📂 各種シートの詳細表示")
-    view_cat_master = st.selectbox("表示するシートを切り替え", ["機器マスター", "点検履歴", "故障報告"], key="master_cat")
-    if st.button("🔄 台帳データを最新にする"):
-        st.cache_data.clear()
-        
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all")
-        if df.empty:
-            st.info(f"「{view_cat_master}」シートにはまだデータがありません。")
-        else:
-            st.dataframe(df, hide_index=True, use_container_width=True)
-    except Exception as e:
-        st.error(f"🚨 接続エラー: {e}")
+        try:
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            df = conn.read(worksheet=view_cat_master, ttl=0).dropna(how="all")
+            if df.empty:
+                st.info(f"「{view_cat_master}」シートにはまだデータがありません。")
+            else:
+                st.dataframe(df, hide_index=True, use_container_width=True)
+        except Exception as e:
+            st.error(f"🚨 接続エラー: {e}")
+
+    # 💡 今回追加した「データ修正機能」
+    with sub_m2:
+        st.markdown("#### ⚙️ 機器データ（シリアル・機種など）の修正")
+        st.write("ME No.を入力すると現在のデータが呼び出され、内容を上書き修正できます。")
+
+        edit_me_no = st.text_input("✏️ 修正したい機器の「ME No.」を入力", placeholder="例: Y0001", key="edit_me_input").strip()
+
+        if edit_me_no:
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                df_master_edit = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+
+                if not df_master_edit.empty and edit_me_no in df_master_edit["ME No."].astype(str).values:
+                    # 該当する機器のデータを抽出
+                    target_row = df_master_edit[df_master_edit["ME No."].astype(str) == edit_me_no].iloc[0]
+
+                    with st.form("edit_master_form"):
+                        st.info(f"💡 {edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
+                        
+                        new_cat = st.text_input("カテゴリ", value=str(target_row.get("カテゴリ", "")))
+                        new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=str(target_row.get("機種", "")))
+                        new_sn = st.text_input("製造番号 (S/N)", value=str(target_row.get("製造番号", "")))
+                        new_year = st.text_input("製造年", value=str(target_row.get("製造年", "")))
+
+                        if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
+                            # 1. 機器マスターの更新
+                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "カテゴリ"] = new_cat
+                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "機種"] = new_model
+                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = new_sn
+                            df_master_edit.loc[df_master_edit["ME No."].astype(str) == edit_me_no, "製造年"] = new_year
+                            conn.update(worksheet="機器マスター", data=df_master_edit)
+
+                            # 2. 点検履歴のS/Nも同期して修正（不整合を防ぐ）
+                            try:
+                                df_hist_edit = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all")
+                                if not df_hist_edit.empty and "ME No." in df_hist_edit.columns:
+                                    df_hist_edit.loc[df_hist_edit["ME No."].astype(str) == edit_me_no, "製造番号"] = new_sn
+                                    conn.update(worksheet="点検履歴", data=df_hist_edit)
+                            except:
+                                pass # 履歴がなくてもエラーストップしない
+
+                            st.success(f"✅ {edit_me_no} のデータを最新に修正しました！")
+                            write_log(st.session_state.get("current_user_name", "管理者"), f"{edit_me_no} のマスターデータを修正")
+                else:
+                    st.warning("⚠️ 指定された ME No. は登録されていません。")
+            except Exception as e:
+                st.error(f"データ取得エラー: {e}")
 
 # ====== タブ3：機器カルテ・実績 ======
 with tabs[2]:
