@@ -150,7 +150,6 @@ def check_auth():
 if not check_auth():
     st.stop()
 
-# --- QRコード用の自動ログインキーを取得する共通関数 ---
 def get_qr_credentials():
     for key in st.secrets.keys():
         try:
@@ -276,32 +275,89 @@ tabs = st.tabs(tab_names)
 
 # ====== タブ1：入力画面 ======
 with tabs[0]:
-    device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
-    scan_model = st.session_state.get("scan_model", "")
-    if scan_model:
-        st.info(f"💡 AIが読み取った型式: **{scan_model}**")
+    # 💡 改良ポイント：S/N または ME No のハイブリッド検索窓
+    default_search_val = url_me_no if url_me_no else st.session_state.get("scan_sn", "")
+    input_keyword = st.text_input("🔍 ME No. または 製造番号(S/N) を入力して検索", value=default_search_val, placeholder="例: Y0001 または 12345678").strip()
 
-    if device_category == "輸液ポンプ":
-        device_model = st.selectbox("▼ 型式", ["TE-131A"])
-    elif device_category == "シリンジポンプ":
-        device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
-    elif device_category == "保育器":
-        incubator_type = st.radio("▼ 保育器のタイプ", ["閉鎖式", "開放型"])
-        device_model = st.selectbox("▼ 型式", ["V-2100G", "Rabee incu i", "その他"]) if incubator_type == "閉鎖式" else st.selectbox("▼ 型式", ["V-505", "103HE", "その他"])
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_master_search = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
+    except:
+        df_master_search = pd.DataFrame()
+
+    master_row = None
+    if input_keyword and not df_master_search.empty:
+        # ① まず ME No. で検索
+        matched_me = df_master_search[df_master_search["ME No."].astype(str).str.strip() == input_keyword]
+        if not matched_me.empty:
+            master_row = matched_me.iloc[0]
+        else:
+            # ② なければ 製造番号(S/N) で検索
+            matched_sn = df_master_search[df_master_search["製造番号"].astype(str).str.strip() == input_keyword]
+            if not matched_sn.empty:
+                master_row = matched_sn.iloc[0]
+
+    # 検索結果に応じて画面を切り替え
+    if master_row is not None:
+        st.success("📢 登録済みの機器が見つかりました。情報を自動出現させます。")
+        final_me_no = str(master_row.get("ME No.", "")).strip()
+        final_sn = str(master_row.get("製造番号", "")).strip()
+        def_category = str(master_row.get("カテゴリ", "その他")).strip()
+        full_meshun = str(master_row.get("機種", "")).strip()
+        def_model = full_meshun.replace(f"{def_category}(", "").replace(")", "")
+        scan_year_val = str(master_row.get("製造年", "")).strip()
+        
+        # ロックされた状態で情報を表示
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.text_input("▼ ME No.", value=final_me_no, disabled=True)
+            st.text_input("▼ 機器の種類", value=def_category, disabled=True)
+        with col_m2:
+            st.text_input("▼ 製造番号 (S/N)", value=final_sn, disabled=True)
+            st.text_input("▼ 型式", value=def_model, disabled=True)
+
+        device_category = def_category
+        device_model = def_model
+        is_registered = True
     else:
-        device_model = st.text_input("▼ 型式を入力してください")
+        is_registered = False
+        if input_keyword:
+            st.info("💡 新規登録の機器です。以下に必要な情報を入力してください。")
+
+        # 新規登録時の手動入力フィールド
+        col_new1, col_new2 = st.columns(2)
+        with col_new1:
+            # QRからの遷移ならME Noに入れる。それ以外はS/Nにデフォルト値を入れる。
+            init_me = url_me_no if url_me_no else ""
+            init_sn = st.session_state.get("scan_sn", "") if not url_me_no else ""
+            final_me_no = st.text_input("▼ ME No. (新規登録)", value=init_me, placeholder="例: Y0001")
+        with col_new2:
+            final_sn = st.text_input("▼ 製造番号 (S/N) (新規登録)", value=init_sn, placeholder="例: 12345678")
+
+        device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
+        scan_model_ai = st.session_state.get("scan_model", "")
+        if scan_model_ai:
+            st.info(f"💡 AIが読み取った型式: **{scan_model_ai}**")
+
+        if device_category == "輸液ポンプ":
+            device_model = st.selectbox("▼ 型式", ["TE-131A"])
+        elif device_category == "シリンジポンプ":
+            device_model = st.selectbox("▼ 型式", ["TE-381", "TE-371", "TE-351", "TE-331", "その他"])
+        elif device_category == "保育器":
+            incubator_type = st.radio("▼ 保育器のタイプ", ["閉鎖式", "開放型"])
+            device_model = st.selectbox("▼ 型式", ["V-2100G", "Rabee incu i", "その他"]) if incubator_type == "閉鎖式" else st.selectbox("▼ 型式", ["V-505", "103HE", "その他"])
+        else:
+            device_model = st.text_input("▼ 型式を入力してください", value=scan_model_ai)
+
+        scan_year_val = st.session_state.get("scan_year", "")
 
     st.markdown("---")
-    
     check_type = st.radio("⚙️ 点検区分", ["院内・ME点検", "メーカー点検", "メーカー修理・校正", "その他外部委託"], horizontal=True)
     
     with st.form("check_form"):
         col_form1, col_form2 = st.columns(2)
         with col_form1: check_date = st.date_input("作業日", date.today())
-        with col_form2: me_no = st.text_input("ME No.", value=url_me_no, placeholder="例: Y0001")
-        
-        default_sn = st.session_state.get("scan_sn", "")
-        serial_no = st.text_input("製造番号 (S/N)", value=default_sn, placeholder="例: 12345678")
+        with col_form2: st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}", disabled=True)
         
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
@@ -479,17 +535,20 @@ with tabs[0]:
         submitted = st.form_submit_button("スプレッドシートに保存")
 
     if submitted:
-        if not me_no:
-            st.warning("⚠️ ME No.を入力してください")
+        if not final_me_no:
+            st.warning("⚠️ ME No. が入力されていません。")
         else:
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 
                 target_sheet = "点検履歴"
                 try:
-                    existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all")
-                except Exception:
-                    existing_data = pd.DataFrame(columns=["点検日", "ME No.", "カテゴリ", "製造番号", "製造年", "機種", "実施者", "判定", "詳細データ", "備考"])
+                    existing_data = conn.read(worksheet=target_sheet, ttl=0)
+                    if existing_data is not None:
+                        existing_data = existing_data.dropna(how="all")
+                except Exception as e:
+                    st.error(f"🚨 「点検履歴」の読み込みに失敗しました（通信制限の可能性があります）。データ保護のため保存を中断しました。1分待ってから再度お試しください。詳細: {e}")
+                    st.stop()
                 
                 details_list = [f"【{check_type}】"]
                 
@@ -514,10 +573,10 @@ with tabs[0]:
 
                 data_dict = {
                     "点検日": str(check_date), 
-                    "ME No.": me_no, 
+                    "ME No.": final_me_no, 
                     "カテゴリ": device_category,
-                    "製造番号": serial_no, 
-                    "製造年": st.session_state.get("scan_year", ""), 
+                    "製造番号": final_sn, 
+                    "製造年": scan_year_val, 
                     "機種": f"{device_category}({device_model})", 
                     "実施者": inspector, 
                     "判定": result, 
@@ -531,37 +590,40 @@ with tabs[0]:
                 
                 master_sheet = "機器マスター"
                 try:
-                    master_df = conn.read(worksheet=master_sheet, ttl=0).dropna(how="all")
-                except Exception:
-                    master_df = pd.DataFrame(columns=["ME No.", "カテゴリ", "機種", "製造番号", "製造年", "最終点検日", "最終判定", "最終実施者"])
+                    master_df = conn.read(worksheet=master_sheet, ttl=0)
+                    if master_df is not None:
+                        master_df = master_df.dropna(how="all")
+                except Exception as e:
+                    st.error(f"🚨 「機器マスター」の読み込みに失敗しました。データ保護のため保存を中断しました。詳細: {e}")
+                    st.stop()
 
                 new_master_entry = pd.DataFrame([{
-                    "ME No.": me_no,
+                    "ME No.": final_me_no,
                     "カテゴリ": device_category,
                     "機種": f"{device_category}({device_model})",
-                    "製造番号": serial_no,
-                    "製造年": st.session_state.get("scan_year", ""),
+                    "製造番号": final_sn,
+                    "製造年": scan_year_val,
                     "最終点検日": str(check_date),
                     "最終判定": f"{result}({check_type})",
                     "最終実施者": inspector
                 }])
 
                 if not master_df.empty and "ME No." in master_df.columns:
-                    master_df = master_df[master_df["ME No."].astype(str) != str(me_no)]
+                    master_df = master_df[master_df["ME No."].astype(str) != str(final_me_no)]
                 
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
                 
-                write_log(inspector, f"{me_no} の点検データを統合保存({check_type})")
+                write_log(inspector, f"{final_me_no} の点検データを統合保存({check_type})")
                 
                 st.balloons()
-                st.success(f"✅ {me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
+                st.success(f"✅ {final_me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
                 st.markdown("---")
-                st.subheader(f"🔲 {me_no} 専用QRコード")
+                st.subheader(f"🔲 {final_me_no} 専用QRコード")
                 
                 fid_code, tok = get_qr_credentials()
-                final_url = f"{APP_URL}/?fid={fid_code}&key={tok}&me_no={me_no}"
+                final_url = f"{APP_URL}/?fid={fid_code}&key={tok}&me_no={final_me_no}"
                 
                 qr = qrcode.QRCode(version=1, box_size=10, border=4)
                 qr.add_data(final_url)
@@ -574,7 +636,7 @@ with tabs[0]:
                 
                 b64 = base64.b64encode(byte_im).decode()
                 html_img = f'''
-                <a href="data:image/png;base64,{b64}" download="QR_{me_no}.png">
+                <a href="data:image/png;base64,{b64}" download="QR_{final_me_no}.png">
                     <img src="data:image/png;base64,{b64}" width="150" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
                 </a>
                 <br>
@@ -585,14 +647,13 @@ with tabs[0]:
             except Exception as e:
                 st.error(f"エラー: {e}")
 
-# ====== タブ2：マスター（★今回書き換えた部分：統計機能を追加） ======
+# ====== タブ2：マスター ======
 with tabs[1]:
     st.subheader("🏥 機器台帳 ＆ 資産台数統計")
     
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # 統計用に常に最新の「機器マスター」データを読み込む
         try:
             df_m_stats = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all")
         except:
@@ -602,18 +663,15 @@ with tabs[1]:
             st.markdown("#### 📊 現在の院内保有台数サマリー")
             total_devices = len(df_m_stats)
             
-            # カテゴリごとに何台あるかを自動集計
             cat_counts = df_m_stats["カテゴリ"].value_counts().reset_index()
             cat_counts.columns = ["機器カテゴリー", "保有台数（台）"]
             cat_counts = cat_counts.sort_values("保有台数（台）", ascending=False)
             
-            # 画面を2列に分けて、左に数字、右にグラフを表示
             col_stat1, col_stat2 = st.columns([1, 2])
             with col_stat1:
                 st.metric("📦 総管理機器数", f"{total_devices} 台")
                 st.dataframe(cat_counts, hide_index=True, use_container_width=True)
             with col_stat2:
-                # カテゴリ別の保有台数を横棒グラフで視覚化
                 st.bar_chart(cat_counts, x="機器カテゴリー", y="保有台数（台）", color="#ff9f43")
             st.markdown("---")
             
