@@ -151,7 +151,6 @@ if not check_auth():
 
 # --- ログイン後の変数 ---
 facility_name = st.session_state["logged_in_facility"]
-# 💡 ここで「QRコードから来たか（URLにme_noがあるか）」を判定します
 url_me_no = st.query_params.get("me_no", "")
 categories_list = ["輸液ポンプ", "顕微鏡", "保育器", "分娩監視装置", "ネブライザー", "透視装置","無影灯","血圧計","超音波診断装置",
                    "ドプラ","検診台","血液ガス分析装置","吸引器類","加湿器類","分娩台","ベビーコット","哺乳瓶消毒器","煮沸消毒器","パルスオキシメーター",
@@ -165,7 +164,6 @@ if "GEMINI_API_KEY" in st.secrets:
         ai_model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         st.error(f"APIキーの設定エラー: {e}")
-
 
 # ==========================================
 # 👩‍⚕️ 【ルートB】QRコードを読み取った場合（トラブル報告画面へ直行）
@@ -234,7 +232,6 @@ if url_me_no:
             except Exception as e:
                 st.error(f"保存エラー: {e}")
 
-    # ログアウト時にURLのパラメータ(me_no)を消去して初期状態に戻す
     if st.button("ログアウト"):
         write_log(st.session_state["current_user_name"], "ログアウト")
         st.session_state["logged_in_facility"] = None
@@ -242,11 +239,11 @@ if url_me_no:
         st.query_params.clear() 
         st.rerun()
         
-    st.stop() # 💡 ここでストップさせるので、QRから来た人は絶対に下の管理画面を見られません！
+    st.stop() 
 
 
 # ==========================================
-# 👨‍🔧 【ルートA】QRを読まなかった場合（直接アクセスした場合は管理画面へ）
+# 👨‍🔧 【ルートA】直接アクセスした場合（管理画面へ）
 # ==========================================
 st.sidebar.success(f"👤 ログイン中: {st.session_state.get('current_user_name', '不明')}")
 if st.sidebar.button("ログアウト"):
@@ -319,15 +316,19 @@ with tabs[0]:
 
         col_new1, col_new2 = st.columns(2)
         with col_new1:
-            init_sn = st.session_state.get("scan_sn", "")
             final_me_no = st.text_input("▼ ME No. (新規登録)", placeholder="例: Y0001")
         with col_new2:
+            init_sn = st.session_state.get("scan_sn", "")
             final_sn = st.text_input("▼ 製造番号 (S/N) (新規登録)", value=init_sn, placeholder="例: 12345678")
 
-        device_category = st.selectbox("▼ 点検する機器の種類", categories_list)
+        # 💡 AI・手入力から引き継いだカテゴリを初期表示させる処理
+        def_cat = st.session_state.get("scan_cat", "輸液ポンプ")
+        def_cat_idx = categories_list.index(def_cat) if def_cat in categories_list else 0
+        device_category = st.selectbox("▼ 点検する機器の種類", categories_list, index=def_cat_idx)
+        
         scan_model_ai = st.session_state.get("scan_model", "")
         if scan_model_ai:
-            st.info(f"💡 AIが読み取った型式: **{scan_model_ai}**")
+            st.info(f"💡 AIまたは手動転送された型式: **{scan_model_ai}**")
 
         if device_category == "輸液ポンプ":
             device_model = st.selectbox("▼ 型式", ["TE-131A"])
@@ -339,7 +340,9 @@ with tabs[0]:
         else:
             device_model = st.text_input("▼ 型式を入力してください", value=scan_model_ai)
 
-        scan_year_val = st.session_state.get("scan_year", "")
+        # 💡 転送された製造年月日（製造年）を画面上で確認・修正できるように入力欄に変更！
+        init_year = st.session_state.get("scan_year", "")
+        scan_year_val = st.text_input("▼ 製造年月日 / 製造年", value=init_year, placeholder="例: 2014-06-12")
 
     st.markdown("---")
     check_type = st.radio("⚙️ 点検区分", ["院内・ME点検", "メーカー点検", "メーカー修理・校正", "その他外部委託"], horizontal=True)
@@ -615,6 +618,10 @@ with tabs[0]:
                 
                 st.session_state["last_check_date"] = check_date
                 
+                # 登録完了後はセッションをクリアして次の入力に備える
+                for k in ["scan_cat", "scan_model", "scan_sn", "scan_year"]:
+                    if k in st.session_state: del st.session_state[k]
+                
                 write_log(inspector, f"{final_me_no} の点検データを統合保存({check_type})")
                 
                 st.balloons()
@@ -881,58 +888,80 @@ with tabs[3]:
         else:
             st.warning("ME No.を入力してください。")
 
-# ====== タブ5：AI新規登録ダッシュボード ======
+# ====== タブ5：AI / 手動 登録ダッシュボード（大改良！） ======
 with tabs[4]:
-    st.subheader("📸 AI銘板スキャナー (新規登録用)")
-    st.write("新しい機器の銘板を撮影すると、情報を読み取って「点検入力」タブに自動転送します。")
+    st.subheader("🆕 新規管理機器の登録・下書き転送")
     
-    if ai_model is None:
-        st.error("❌ APIキーが設定されていないか、ライブラリのバージョンが古いです。")
+    # ラジオボタンで2パターンを綺麗に切り替え
+    reg_mode = st.radio("データの入力方法を選択してください", ["📸 AI銘板スキャナー", "✏️ 手動で情報を入力"], horizontal=True)
+    
+    if reg_mode == "📸 AI銘板スキャナー":
+        st.write("新しい機器の銘板を撮影すると、情報を読み取って「点検入力」タブに自動転送します。")
+        if ai_model is None:
+            st.error("❌ APIキーが設定されていないか、ライブラリのバージョンが古いです。")
+        else:
+            img_file = st.camera_input("銘板（シール）を撮影してください", key="ai_camera")
+            
+            if img_file:
+                current_image_bytes = img_file.getvalue()
+                if st.session_state.get("last_scanned_image") != current_image_bytes:
+                    with st.spinner("AIが文字を解析しています（約10秒）..."):
+                        try:
+                            img = Image.open(img_file)
+                            prompt = """
+                            この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
+                            キーは以下のようにしてください:
+                            - model (型式)
+                            - serial_number (製造番号/SN)
+                            - manufacture_year (製造年。例: 2018)
+                            """
+                            response = ai_model.generate_content([prompt, img])
+                            json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                            if json_match:
+                                data = json.loads(json_match.group())
+                                
+                                st.session_state["scan_model"] = data.get("model", "")
+                                st.session_state["scan_sn"] = data.get("serial_number", "")
+                                st.session_state["scan_year"] = data.get("manufacture_year", "")
+                                st.session_state["scan_cat"] = "その他" # AI時はその他を初期値にセット
+                                
+                                st.session_state["last_scanned_image"] = current_image_bytes
+                                st.rerun() 
+                            else:
+                                st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
+                        except Exception as e:
+                            st.error(f"🚨 システムエラー: {e}")
+                else:
+                    st.success("✅ 読み取り成功！")
+                    st.write(f"**型式:** {st.session_state.get('scan_model', '')}")
+                    st.write(f"**製造番号:** {st.session_state.get('scan_sn', '')}")
+                    st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
+                    st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
+                    
     else:
-        img_file = st.camera_input("銘板（シール）を撮影してください", key="ai_camera")
-        
-        if img_file:
-            current_image_bytes = img_file.getvalue()
-            if st.session_state.get("last_scanned_image") != current_image_bytes:
-                with st.spinner("AIが文字を解析しています（約10秒）..."):
-                    try:
-                        img = Image.open(img_file)
-                        prompt = """
-                        この医療機器の銘板写真から以下の情報を抜き出して、JSON形式で回答してください。
-                        キーは以下のようにしてください:
-                        - model (型式)
-                        - serial_number (製造番号/SN)
-                        - manufacture_year (製造年。例: 2018)
-                        """
-                        response = ai_model.generate_content([prompt, img])
-                        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-                        if json_match:
-                            data = json.loads(json_match.group())
-                            
-                            st.session_state["scan_model"] = data.get("model", "")
-                            st.session_state["scan_sn"] = data.get("serial_number", "")
-                            st.session_state["scan_year"] = data.get("manufacture_year", "")
-                            
-                            st.session_state["last_scanned_image"] = current_image_bytes
-                            st.rerun() 
-                        else:
-                            st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
-                    except Exception as e:
-                        st.error(f"🚨 システムエラー: {e}")
-            else:
-                st.success("✅ 読み取り成功！")
-                st.write(f"**型式:** {st.session_state.get('scan_model', '')}")
-                st.write(f"**製造番号:** {st.session_state.get('scan_sn', '')}")
-                st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
-                st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
+        st.write("機器の情報を手入力して「点検入力」タブに下書きとして一括転送します。")
+        with st.form("manual_reg_form"):
+            # 💡 ご指定いただいた4項目を綺麗にフォーム化！
+            man_cat = st.selectbox("① 機器種類 (カテゴリ)", categories_list, key="man_reg_cat")
+            man_model = st.text_input("② 型式 (機種)", placeholder="例: TE-131A", key="man_reg_model")
+            man_sn = st.text_input("③ 製造番号 (S/N)", placeholder="例: 12345678", key="man_reg_sn")
+            man_year = st.text_input("④ 製造年月日 / 製造年", placeholder="例: 2014-06-12", key="man_reg_year")
+            
+            if st.form_submit_button("💡 入力した情報を「点検入力」へ転送する", type="primary"):
+                st.session_state["scan_cat"] = man_cat
+                st.session_state["scan_model"] = man_model
+                st.session_state["scan_sn"] = man_sn
+                st.session_state["scan_year"] = man_year
+                
+                st.success("✅ 情報をセットしました！一番左の「📝 点検入力」タブを開くと、入力した4項目が自動で完全反映されています。")
 
-# ====== 追加：タブ6：ユーザー・ログ管理（全員に表示されます） ======
-with tabs[5]:
-    st.subheader("⚙️ ユーザー承認・アクセスログ管理")
+# ====== 追加：タブ6：ユーザー・ログ管理 ======
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
     
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
+    with tabs[5]:
+        st.subheader("⚙️ ユーザー承認・アクセスログ管理")
         
         st.markdown("#### 👤 承認待ちユーザー")
         pending_users = df_users[df_users["ステータス"] == "未承認"]
@@ -965,5 +994,5 @@ with tabs[5]:
         except:
             st.write("ログシートがまだ作成されていません。")
             
-    except Exception as e:
-        st.error(f"データ取得エラー: {e}")
+except Exception as e:
+    st.error(f"データ取得エラー: {e}")
