@@ -17,7 +17,7 @@ APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
-# 📝 データお掃除用の共通関数（.0 や ' や nan を自動で除去して綺麗にする魔法）
+# 📝 データお掃除用の共通関数
 def clean_data_str(val):
     s = str(val).replace("'", "").strip()
     if s.endswith(".0"):
@@ -29,7 +29,7 @@ def clean_data_str(val):
 def clean_series(series):
     return series.astype(str).str.replace("'", "", regex=False).str.replace(r'\.0$', '', regex=True).str.replace(r'^nan$', '', flags=re.IGNORECASE, regex=True).str.strip()
 
-# 📝 ゼロ落ち防止用の関数（保存時に使用）
+# 📝 ゼロ落ち防止用の関数
 def protect_zeros(val_str):
     val_str = str(val_str).strip()
     if val_str.startswith("0") and val_str.isdigit():
@@ -56,17 +56,13 @@ def write_log(user_name, action):
         pass 
 
 # ==========================================
-# 🔐 個別IDログイン認証（自動ログイン廃止・全員必須）
+# 🔐 ログイン認証（権限分岐を完全撤廃・全員共通ログイン）
 # ==========================================
 def check_auth():
     if "logged_in_facility" not in st.session_state:
         st.session_state["logged_in_facility"] = None
     if "current_user_name" not in st.session_state:
         st.session_state["current_user_name"] = None
-    if "is_admin" not in st.session_state:
-        st.session_state["is_admin"] = False
-    if "is_nurse_mode" not in st.session_state:
-        st.session_state["is_nurse_mode"] = False
 
     if st.session_state["logged_in_facility"] is not None:
         return True
@@ -79,6 +75,7 @@ def check_auth():
             st.info("セキュリティ保護のため、ログインが必要です。")
             input_id = st.text_input("👤 ユーザーID")
             input_pass = st.text_input("🔑 パスワード", type="password")
+            
             if st.form_submit_button("ログイン", use_container_width=True):
                 clean_id = input_id.strip()
                 clean_pass = input_pass.strip()
@@ -99,14 +96,6 @@ def check_auth():
                             if saved_status == "OK":
                                 st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
                                 st.session_state["current_user_name"] = clean_data_str(user_info["名前"])
-                                
-                                # 💡 ここで権限による画面の振り分けを行います
-                                if clean_data_str(user_info.get("権限")) == "admin":
-                                    st.session_state["is_admin"] = True
-                                    st.session_state["is_nurse_mode"] = False
-                                else:
-                                    st.session_state["is_admin"] = False
-                                    st.session_state["is_nurse_mode"] = True
                                 
                                 write_log(st.session_state["current_user_name"], "ログインしました")
                                 st.rerun()
@@ -144,7 +133,7 @@ def check_auth():
                                 "パスワード": new_pass,
                                 "名前": new_name,
                                 "ステータス": "未承認",
-                                "権限": "user"
+                                "権限": "user" # ※権限は使わなくなりましたが履歴として保存します
                             }])
                             updated_users = pd.concat([df_users, new_user], ignore_index=True)
                             conn.update(worksheet="ユーザー", data=updated_users)
@@ -162,8 +151,8 @@ if not check_auth():
 
 # --- ログイン後の変数 ---
 facility_name = st.session_state["logged_in_facility"]
-query_params = st.query_params
-url_me_no = query_params.get("me_no", "")
+# 💡 ここで「QRコードから来たか（URLにme_noがあるか）」を判定します
+url_me_no = st.query_params.get("me_no", "")
 categories_list = ["輸液ポンプ", "顕微鏡", "保育器", "分娩監視装置", "ネブライザー", "透視装置","無影灯","血圧計","超音波診断装置",
                    "ドプラ","検診台","血液ガス分析装置","吸引器類","加湿器類","分娩台","ベビーコット","哺乳瓶消毒器","煮沸消毒器","パルスオキシメーター",
                    "聴力検査器","光線治療器","酸素モニタ","電気メス","麻酔器","生体情報モニタ","手術台","子宮鏡","滅菌装置", "その他"]
@@ -178,84 +167,84 @@ if "GEMINI_API_KEY" in st.secrets:
         st.error(f"APIキーの設定エラー: {e}")
 
 # ==========================================
-# 👩‍⚕️ 【ルートA】現場スタッフモード（権限が user の場合）
+# 👩‍⚕️ 【ルートB】QRコードを読み取った場合（問答無用でトラブル報告画面）
 # ==========================================
-if st.session_state.get("is_nurse_mode"):
+if url_me_no:
     st.markdown(f"<h2 style='text-align: center; color: #FF4B4B;'>🚨 {facility_name}</h2>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>機器トラブル報告システム</h3>", unsafe_allow_html=True)
     
-    st.info("💡 QRコードを読み込んだ場合は自動でME No.が入ります。")
-    report_me_no = st.text_input("対象の機器(ME No.)", value=url_me_no)
+    st.success(f"📱 対象機器: **{url_me_no}**")
     
-    if report_me_no:
-        with st.form("nurse_report_form"):
-            rep_date = st.date_input("発生日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
-            rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
-            rep_name = st.text_input("報告者名", value=st.session_state.get("current_user_name", ""))
-            c1, c2 = st.columns(2)
-            with c1:
-                err_power = st.checkbox("🔌 電源不良")
-                err_error = st.checkbox("⚠️ エラー表示")
-            with c2:
-                err_alarm = st.checkbox("🔔 アラーム")
-                err_drop = st.checkbox("💥 落下・破損")
-            rep_detail = st.text_area("詳細内容")
+    with st.form("nurse_report_form"):
+        rep_date = st.date_input("発生日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
+        rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
+        rep_name = st.text_input("報告者名", value=st.session_state.get("current_user_name", ""))
+        c1, c2 = st.columns(2)
+        with c1:
+            err_power = st.checkbox("🔌 電源不良")
+            err_error = st.checkbox("⚠️ エラー表示")
+        with c2:
+            err_alarm = st.checkbox("🔔 アラーム")
+            err_drop = st.checkbox("💥 落下・破損")
+        rep_detail = st.text_area("詳細内容")
+        
+        if st.form_submit_button("📨 報告を送信する", type="primary", use_container_width=True):
+            symptoms = []
+            if err_power: symptoms.append("電源不良")
+            if err_error: symptoms.append("エラー表示")
+            if err_alarm: symptoms.append("アラーム")
+            if err_drop: symptoms.append("落下・破損")
             
-            if st.form_submit_button("📨 報告を送信する", type="primary", use_container_width=True):
-                symptoms = []
-                if err_power: symptoms.append("電源不良")
-                if err_error: symptoms.append("エラー表示")
-                if err_alarm: symptoms.append("アラーム")
-                if err_drop: symptoms.append("落下・破損")
-                
-                symptom_str = "、".join(symptoms)
-                if rep_detail:
-                    if symptom_str:
-                        symptom_str += f" (詳細: {rep_detail})"
-                    else:
-                        symptom_str = f"その他 (詳細: {rep_detail})"
-                elif not symptom_str:
-                    symptom_str = "記載なし"
+            symptom_str = "、".join(symptoms)
+            if rep_detail:
+                if symptom_str:
+                    symptom_str += f" (詳細: {rep_detail})"
+                else:
+                    symptom_str = f"その他 (詳細: {rep_detail})"
+            elif not symptom_str:
+                symptom_str = "記載なし"
 
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                target_sheet = "故障報告"
                 try:
-                    conn = st.connection("gsheets", type=GSheetsConnection)
-                    target_sheet = "故障報告"
-                    try:
-                        existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all").fillna("")
-                    except Exception:
-                        existing_data = pd.DataFrame(columns=["報告日", "発生日", "ME No.", "機種", "報告者", "部署", "症状", "対応状況"])
-                    
-                    new_report = pd.DataFrame([{
-                        "報告日": str(date.today()),
-                        "発生日": str(rep_date),
-                        "ME No.": report_me_no,
-                        "機種": "不明な機器",
-                        "報告者": rep_name,
-                        "部署": rep_dept,
-                        "症状": symptom_str,
-                        "対応状況": "未対応"
-                    }])
-                    
-                    updated_df = pd.concat([existing_data, new_report], ignore_index=True)
-                    conn.update(worksheet=target_sheet, data=updated_df)
-                    
-                    write_log(f"現場({rep_name})", f"{report_me_no} の故障報告を送信")
-                    
-                    st.balloons()
-                    st.success("✅ 報告を受け付けました。ご協力ありがとうございます。")
-                except Exception as e:
-                    st.error(f"保存エラー: {e}")
+                    existing_data = conn.read(worksheet=target_sheet, ttl=0).dropna(how="all").fillna("")
+                except Exception:
+                    existing_data = pd.DataFrame(columns=["報告日", "発生日", "ME No.", "機種", "報告者", "部署", "症状", "対応状況"])
+                
+                new_report = pd.DataFrame([{
+                    "報告日": str(date.today()),
+                    "発生日": str(rep_date),
+                    "ME No.": url_me_no,
+                    "機種": "不明な機器",
+                    "報告者": rep_name,
+                    "部署": rep_dept,
+                    "症状": symptom_str,
+                    "対応状況": "未対応"
+                }])
+                
+                updated_df = pd.concat([existing_data, new_report], ignore_index=True)
+                conn.update(worksheet=target_sheet, data=updated_df)
+                
+                write_log(f"現場({rep_name})", f"{url_me_no} の故障報告を送信")
+                
+                st.balloons()
+                st.success("✅ 報告を受け付けました。ご協力ありがとうございます。")
+            except Exception as e:
+                st.error(f"保存エラー: {e}")
 
+    # ログアウト時にURLのパラメータ(me_no)を消去して初期状態に戻す
     if st.button("ログアウト"):
         write_log(st.session_state["current_user_name"], "ログアウト")
         st.session_state["logged_in_facility"] = None
-        st.session_state["is_nurse_mode"] = False
         st.session_state["current_user_name"] = None
+        st.query_params.clear() 
         st.rerun()
-    st.stop()
+        
+    st.stop() # 💡 ここでストップさせるので、QRから来た人は絶対に下の管理画面を見られません！
 
 # ==========================================
-# 👨‍🔧 【ルートB】管理者・エンジニア モード
+# 👨‍🔧 【ルートA】QRを読まなかった場合（直接アクセスした場合は管理画面）
 # ==========================================
 st.sidebar.success(f"👤 ログイン中: {st.session_state.get('current_user_name', '不明')}")
 if st.sidebar.button("ログアウト"):
@@ -267,12 +256,13 @@ if st.sidebar.button("ログアウト"):
 st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理")
 
+# 権限分岐を無くしたので、全員に同じタブが表示されます
 tab_names = ["📝 点検入力", "📁 マスター", "🔍 機器カルテ・実績", "🔲 QR発行", "📸 AI登録", "👥 ユーザー・ログ管理"]
 tabs = st.tabs(tab_names)
 
 # ====== タブ1：入力画面 ======
 with tabs[0]:
-    default_search_val = url_me_no if url_me_no else st.session_state.get("scan_sn", "")
+    default_search_val = st.session_state.get("scan_sn", "")
     input_keyword = st.text_input("🔍 ME No. または 製造番号(S/N) を入力して検索", value=default_search_val, placeholder="例: Y0001 または 12345678").strip()
 
     try:
@@ -328,9 +318,8 @@ with tabs[0]:
 
         col_new1, col_new2 = st.columns(2)
         with col_new1:
-            init_me = url_me_no if url_me_no else ""
-            init_sn = st.session_state.get("scan_sn", "") if not url_me_no else ""
-            final_me_no = st.text_input("▼ ME No. (新規登録)", value=init_me, placeholder="例: Y0001")
+            init_sn = st.session_state.get("scan_sn", "")
+            final_me_no = st.text_input("▼ ME No. (新規登録)", placeholder="例: Y0001")
         with col_new2:
             final_sn = st.text_input("▼ 製造番号 (S/N) (新規登録)", value=init_sn, placeholder="例: 12345678")
 
@@ -362,7 +351,7 @@ with tabs[0]:
         with col_form1: 
             check_date = st.date_input("作業日", value=st.session_state["last_check_date"], min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
         with col_form2: 
-            st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}", disabled=True)
+            st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}" if is_registered or input_keyword else "", disabled=True)
         
         chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
         chk_a1=chk_a2=chk_a3=chk_a4 = False
@@ -633,7 +622,6 @@ with tabs[0]:
                 st.markdown("---")
                 st.subheader(f"🔲 {final_me_no} 専用QRコード")
                 
-                # 💡 発行されるQRコードは、純粋な「ME No.」だけのURLになります
                 final_url = f"{APP_URL}/?me_no={final_me_no}"
                 
                 qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -867,7 +855,6 @@ with tabs[3]:
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
-            # 💡 ここも純粋な「ME No.」だけのURLを発行します
             final_url = f"{APP_URL}/?me_no={target_qr_me}"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -938,45 +925,44 @@ with tabs[4]:
                 st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
                 st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
 
-# ====== 追加：タブ6：ユーザー・ログ管理（管理者のみ） ======
-if st.session_state.get("is_admin"):
-    with tabs[5]:
-        st.subheader("⚙️ ユーザー承認・アクセスログ管理")
+# ====== 追加：タブ6：ユーザー・ログ管理（全員に表示されます） ======
+with tabs[5]:
+    st.subheader("⚙️ ユーザー承認・アクセスログ管理")
+    
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
+        
+        st.markdown("#### 👤 承認待ちユーザー")
+        pending_users = df_users[df_users["ステータス"] == "未承認"]
+        if pending_users.empty:
+            st.write("現在、承認待ちのユーザーはいません。")
+        else:
+            for index, row in pending_users.iterrows():
+                col_u1, col_u2 = st.columns([3, 1])
+                with col_u1:
+                    st.write(f"申請者: **{row['名前']}** (ID: {row['ユーザーID']})")
+                with col_u2:
+                    if st.button("✅ 承認する", key=f"approve_{row['ユーザーID']}"):
+                        df_users.at[index, "ステータス"] = "OK"
+                        conn.update(worksheet="ユーザー", data=df_users)
+                        write_log(st.session_state.get("current_user_name", "管理者"), f"{row['名前']} のアカウントを承認")
+                        st.success(f"{row['名前']} さんを承認（OK）しました！")
+                        st.rerun()
+
+        st.markdown("---")
+        st.markdown("#### 📋 アクセス履歴（最新順）")
+        if st.button("🔄 ログを更新"):
+            st.cache_data.clear()
         
         try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
-            
-            st.markdown("#### 👤 承認待ちユーザー")
-            pending_users = df_users[df_users["ステータス"] == "未承認"]
-            if pending_users.empty:
-                st.write("現在、承認待ちのユーザーはいません。")
+            df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
+            if not df_logs.empty:
+                st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
             else:
-                for index, row in pending_users.iterrows():
-                    col_u1, col_u2 = st.columns([3, 1])
-                    with col_u1:
-                        st.write(f"申請者: **{row['名前']}** (ID: {row['ユーザーID']})")
-                    with col_u2:
-                        if st.button("✅ 承認する", key=f"approve_{row['ユーザーID']}"):
-                            df_users.at[index, "ステータス"] = "OK"
-                            conn.update(worksheet="ユーザー", data=df_users)
-                            write_log("管理者", f"{row['名前']} のアカウントを承認")
-                            st.success(f"{row['名前']} さんを承認（OK）しました！")
-                            st.rerun()
-
-            st.markdown("---")
-            st.markdown("#### 📋 アクセス履歴（最新順）")
-            if st.button("🔄 ログを更新"):
-                st.cache_data.clear()
+                st.write("ログはまだありません。")
+        except:
+            st.write("ログシートがまだ作成されていません。")
             
-            try:
-                df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
-                if not df_logs.empty:
-                    st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
-                else:
-                    st.write("ログはまだありません。")
-            except:
-                st.write("ログシートがまだ作成されていません。")
-                
-        except Exception as e:
-            st.error(f"データ取得エラー: {e}")
+    except Exception as e:
+        st.error(f"データ取得エラー: {e}")
