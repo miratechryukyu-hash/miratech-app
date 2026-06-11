@@ -17,6 +17,18 @@ APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
+# 📝 データお掃除用の共通関数（.0 や ' や nan を自動で除去して綺麗にする魔法）
+def clean_data_str(val):
+    s = str(val).replace("'", "").strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    if s.lower() == "nan":
+        s = ""
+    return s
+
+def clean_series(series):
+    return series.astype(str).str.replace("'", "", regex=False).str.replace(r'\.0$', '', regex=True).str.replace(r'^nan$', '', flags=re.IGNORECASE, regex=True).str.strip()
+
 # 📝 ゼロ落ち防止用の関数（保存時に使用）
 def protect_zeros(val_str):
     val_str = str(val_str).strip()
@@ -90,20 +102,20 @@ def check_auth():
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
                     
-                    clean_db_ids = df_users["ユーザーID"].astype(str).str.replace(".0", "", regex=False).str.strip()
+                    clean_db_ids = clean_series(df_users["ユーザーID"])
                     user_row = df_users[clean_db_ids == clean_id]
                     
                     if not user_row.empty:
                         user_info = user_row.iloc[0]
-                        saved_pass = str(user_info["パスワード"]).replace(".0", "").strip()
-                        saved_status = str(user_info["ステータス"]).strip()
+                        saved_pass = clean_data_str(user_info["パスワード"])
+                        saved_status = clean_data_str(user_info["ステータス"])
                         
                         if saved_pass == clean_pass:
                             if saved_status == "OK":
                                 st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
                                 st.session_state["is_nurse_mode"] = False
-                                st.session_state["current_user_name"] = str(user_info["名前"]).strip()
-                                st.session_state["is_admin"] = (str(user_info.get("権限")).strip() == "admin")
+                                st.session_state["current_user_name"] = clean_data_str(user_info["名前"])
+                                st.session_state["is_admin"] = (clean_data_str(user_info.get("権限")) == "admin")
                                 
                                 write_log(st.session_state["current_user_name"], "ログインしました")
                                 st.rerun()
@@ -193,7 +205,6 @@ if st.session_state.get("is_nurse_mode"):
     if url_me_no:
         st.success(f"📱 対象機器: **{url_me_no}**")
         with st.form("nurse_report_form"):
-            # ★ ここも過去の日付を安全に入力できるように修正
             rep_date = st.date_input("発生日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
             rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
             rep_name = st.text_input("報告者名")
@@ -294,14 +305,15 @@ with tabs[0]:
 
     master_row = None
     if input_keyword and not df_master_search.empty:
-        clean_db_me = df_master_search["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
-        clean_db_sn = df_master_search["製造番号"].astype(str).str.replace("'", "", regex=False).str.strip()
+        clean_keyword = clean_data_str(input_keyword)
+        clean_db_me = clean_series(df_master_search["ME No."])
+        clean_db_sn = clean_series(df_master_search["製造番号"])
         
-        matched_me = df_master_search[clean_db_me == input_keyword]
+        matched_me = df_master_search[clean_db_me == clean_keyword]
         if not matched_me.empty:
             master_row = matched_me.iloc[0]
         else:
-            matched_sn = df_master_search[clean_db_sn == input_keyword]
+            matched_sn = df_master_search[clean_db_sn == clean_keyword]
             if not matched_sn.empty:
                 master_row = matched_sn.iloc[0]
 
@@ -309,12 +321,12 @@ with tabs[0]:
 
     if master_row is not None:
         st.success("📢 登録済みの機器が見つかりました。情報を自動出現させます。")
-        final_me_no = str(master_row.get("ME No.", "")).replace("'", "").strip()
-        final_sn = str(master_row.get("製造番号", "")).replace("'", "").strip()
-        def_category = str(master_row.get("カテゴリ", "その他")).strip()
-        full_meshun = str(master_row.get("機種", "")).strip()
+        final_me_no = clean_data_str(master_row.get("ME No.", ""))
+        final_sn = clean_data_str(master_row.get("製造番号", ""))
+        def_category = clean_data_str(master_row.get("カテゴリ", "その他"))
+        full_meshun = clean_data_str(master_row.get("機種", ""))
         def_model = full_meshun.replace(f"{def_category}(", "").replace(")", "")
-        scan_year_val = str(master_row.get("製造年", "")).replace("'", "").strip()
+        scan_year_val = clean_data_str(master_row.get("製造年", ""))
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
@@ -364,14 +376,12 @@ with tabs[0]:
     st.markdown("---")
     check_type = st.radio("⚙️ 点検区分", ["院内・ME点検", "メーカー点検", "メーカー修理・校正", "その他外部委託"], horizontal=True)
     
-    # ★ 連続入力モードのための初期化
     if "last_check_date" not in st.session_state:
         st.session_state["last_check_date"] = date.today()
 
     with st.form("check_form"):
         col_form1, col_form2 = st.columns(2)
         with col_form1: 
-            # ★ 1950年まで遡れるように制限を解除 ＆ 前回の入力日を記憶して表示！
             check_date = st.date_input("作業日", value=st.session_state["last_check_date"], min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
         with col_form2: 
             st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}", disabled=True)
@@ -521,7 +531,7 @@ with tabs[0]:
                             inc_o_checks["設定温度警報(マニュアル)"] = st.checkbox("設定温度警報(マニュアル)", value=True)
                             inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                         with o4:
-                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作作動", value=True)
+                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
                             inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
                             inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
 
@@ -629,13 +639,12 @@ with tabs[0]:
                 }])
 
                 if not master_df.empty and "ME No." in master_df.columns:
-                    clean_master_df_me = master_df["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
-                    master_df = master_df[clean_master_df_me != str(final_me_no).strip()]
+                    clean_master_df_me = clean_series(master_df["ME No."])
+                    master_df = master_df[clean_master_df_me != clean_data_str(final_me_no)]
                 
                 updated_master_df = pd.concat([master_df, new_master_entry], ignore_index=True)
                 conn.update(worksheet=master_sheet, data=updated_master_df)
                 
-                # ★ ここで成功した日付を記憶！次の機器を入力する時に引き継がれます
                 st.session_state["last_check_date"] = check_date
                 
                 write_log(inspector, f"{final_me_no} の点検データを統合保存({check_type})")
@@ -731,8 +740,8 @@ with tabs[1]:
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 df_master_edit = conn.read(worksheet="機器マスター", ttl=0).dropna(how="all").fillna("")
 
-                clean_edit_me_no = edit_me_no.strip()
-                master_me_nos = df_master_edit["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+                clean_edit_me_no = clean_data_str(edit_me_no)
+                master_me_nos = clean_series(df_master_edit["ME No."])
 
                 if not df_master_edit.empty and clean_edit_me_no in master_me_nos.values:
                     target_row = df_master_edit[master_me_nos == clean_edit_me_no].iloc[0]
@@ -740,10 +749,10 @@ with tabs[1]:
                     with st.form("edit_master_form"):
                         st.info(f"💡 {clean_edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
                         
-                        new_cat = st.text_input("カテゴリ", value=str(target_row.get("カテゴリ", "")).replace("'", ""))
-                        new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=str(target_row.get("機種", "")).replace("'", ""))
-                        new_sn = st.text_input("製造番号 (S/N)", value=str(target_row.get("製造番号", "")).replace("'", ""))
-                        new_year = st.text_input("製造年", value=str(target_row.get("製造年", "")).replace("'", ""))
+                        new_cat = st.text_input("カテゴリ", value=clean_data_str(target_row.get("カテゴリ", "")))
+                        new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=clean_data_str(target_row.get("機種", "")))
+                        new_sn = st.text_input("製造番号 (S/N)", value=clean_data_str(target_row.get("製造番号", "")))
+                        new_year = st.text_input("製造年", value=clean_data_str(target_row.get("製造年", "")))
 
                         if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
                             
@@ -759,7 +768,7 @@ with tabs[1]:
                             try:
                                 df_hist_edit = conn.read(worksheet="点検履歴", ttl=0).dropna(how="all").fillna("")
                                 if not df_hist_edit.empty and "ME No." in df_hist_edit.columns:
-                                    clean_hist_me = df_hist_edit["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+                                    clean_hist_me = clean_series(df_hist_edit["ME No."])
                                     mask_h = clean_hist_me == clean_edit_me_no
                                     if mask_h.any():
                                         df_hist_edit.loc[mask_h, "カテゴリ"] = new_cat
@@ -813,22 +822,22 @@ with tabs[2]:
                 
                 if len(selection_event.selection.rows) > 0:
                     idx = selection_event.selection.rows[0]
-                    target_me = str(df_master.iloc[idx].get("ME No.", "")).replace("'", "").strip()
-                    model_name = str(df_master.iloc[idx].get("機種", "不明な機器")).replace("'", "").strip()
+                    target_me = clean_data_str(df_master.iloc[idx].get("ME No.", ""))
+                    model_name = clean_data_str(df_master.iloc[idx].get("機種", "不明な機器"))
                     
                     st.markdown("---")
                     st.markdown(f"<h3 style='color: #2e86de;'>📱 {model_name} (ME No: {target_me}) のカルテ</h3>", unsafe_allow_html=True)
                     
                     if not df_history.empty and "ME No." in df_history.columns:
-                        clean_hist_search_me = df_history["ME No."].astype(str).str.replace("'", "", regex=False).str.strip()
+                        clean_hist_search_me = clean_series(df_history["ME No."])
                         hist_df = df_history[clean_hist_search_me == target_me].iloc[::-1]
                         
                         if not hist_df.empty:
                             st.write("#### 📝 過去の点検・修理履歴")
                             st.dataframe(hist_df, use_container_width=True, hide_index=True)
                             
-                            last_date = hist_df.iloc[0].get("点検日", "-")
-                            last_result = hist_df.iloc[0].get("判定", "-")
+                            last_date = clean_data_str(hist_df.iloc[0].get("点検日", "-"))
+                            last_result = clean_data_str(hist_df.iloc[0].get("判定", "-"))
                             st.success(f"📌 最新の点検日: {last_date} ／ 判定: {last_result}")
                         else:
                             st.info("この機器の点検・修理履歴はありません。")
