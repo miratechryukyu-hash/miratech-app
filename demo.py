@@ -967,5 +967,3 @@ with tabs[5]:
             
     except Exception as e:
         st.error(f"データ取得エラー: {e}")
-
-```
