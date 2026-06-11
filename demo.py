@@ -11,9 +11,9 @@ from PIL import Image
 import base64
 
 # ==========================================
-# ⚙️ 設定
+# ⚙️ 設定（★ここを現在の正しいURLに修正しました！）
 # ==========================================
-APP_URL = "https://miratechryukyu-hashs-apps-n4w6p52.streamlit.app"
+APP_URL = "https://miratech-app-bwyle23rwce9hxkpvh3rk8.streamlit.app"
 
 st.set_page_config(page_title="miratech 医療機器管理システム", layout="centered")
 
@@ -56,7 +56,7 @@ def write_log(user_name, action):
         pass 
 
 # ==========================================
-# 🔐 ログイン認証（権限分岐を完全撤廃・全員共通ログイン）
+# 🔐 ログイン認証
 # ==========================================
 def check_auth():
     if "logged_in_facility" not in st.session_state:
@@ -133,7 +133,7 @@ def check_auth():
                                 "パスワード": new_pass,
                                 "名前": new_name,
                                 "ステータス": "未承認",
-                                "権限": "user" # ※権限は使わなくなりましたが履歴として保存します
+                                "権限": "user"
                             }])
                             updated_users = pd.concat([df_users, new_user], ignore_index=True)
                             conn.update(worksheet="ユーザー", data=updated_users)
@@ -256,7 +256,6 @@ if st.sidebar.button("ログアウト"):
 st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理")
 
-# 権限分岐を無くしたので、全員に同じタブが表示されます
 tab_names = ["📝 点検入力", "📁 マスター", "🔍 機器カルテ・実績", "🔲 QR発行", "📸 AI登録", "👥 ユーザー・ログ管理"]
 tabs = st.tabs(tab_names)
 
@@ -925,44 +924,45 @@ with tabs[4]:
                 st.write(f"**製造年:** {st.session_state.get('scan_year', '')}")
                 st.info("💡 このデータは一番左の「📝 点検入力」タブの入力欄に自動でセットされました！そのまま点検に進めます。")
 
-# ====== 追加：タブ6：ユーザー・ログ管理（全員に表示されます） ======
-with tabs[5]:
-    st.subheader("⚙️ ユーザー承認・アクセスログ管理")
-    
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
-        
-        st.markdown("#### 👤 承認待ちユーザー")
-        pending_users = df_users[df_users["ステータス"] == "未承認"]
-        if pending_users.empty:
-            st.write("現在、承認待ちのユーザーはいません。")
-        else:
-            for index, row in pending_users.iterrows():
-                col_u1, col_u2 = st.columns([3, 1])
-                with col_u1:
-                    st.write(f"申請者: **{row['名前']}** (ID: {row['ユーザーID']})")
-                with col_u2:
-                    if st.button("✅ 承認する", key=f"approve_{row['ユーザーID']}"):
-                        df_users.at[index, "ステータス"] = "OK"
-                        conn.update(worksheet="ユーザー", data=df_users)
-                        write_log(st.session_state.get("current_user_name", "管理者"), f"{row['名前']} のアカウントを承認")
-                        st.success(f"{row['名前']} さんを承認（OK）しました！")
-                        st.rerun()
-
-        st.markdown("---")
-        st.markdown("#### 📋 アクセス履歴（最新順）")
-        if st.button("🔄 ログを更新"):
-            st.cache_data.clear()
+# ====== 追加：タブ6：ユーザー・ログ管理（管理者のみ） ======
+if st.session_state.get("is_admin"):
+    with tabs[5]:
+        st.subheader("⚙️ ユーザー承認・アクセスログ管理")
         
         try:
-            df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
-            if not df_logs.empty:
-                st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
-            else:
-                st.write("ログはまだありません。")
-        except:
-            st.write("ログシートがまだ作成されていません。")
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            df_users = conn.read(worksheet="ユーザー", ttl=0).dropna(how="all").fillna("")
             
-    except Exception as e:
-        st.error(f"データ取得エラー: {e}")
+            st.markdown("#### 👤 承認待ちユーザー")
+            pending_users = df_users[df_users["ステータス"] == "未承認"]
+            if pending_users.empty:
+                st.write("現在、承認待ちのユーザーはいません。")
+            else:
+                for index, row in pending_users.iterrows():
+                    col_u1, col_u2 = st.columns([3, 1])
+                    with col_u1:
+                        st.write(f"申請者: **{row['名前']}** (ID: {row['ユーザーID']})")
+                    with col_u2:
+                        if st.button("✅ 承認する", key=f"approve_{row['ユーザーID']}"):
+                            df_users.at[index, "ステータス"] = "OK"
+                            conn.update(worksheet="ユーザー", data=df_users)
+                            write_log("管理者", f"{row['名前']} のアカウントを承認")
+                            st.success(f"{row['名前']} さんを承認（OK）しました！")
+                            st.rerun()
+
+            st.markdown("---")
+            st.markdown("#### 📋 アクセス履歴（最新順）")
+            if st.button("🔄 ログを更新"):
+                st.cache_data.clear()
+            
+            try:
+                df_logs = conn.read(worksheet="アクセスログ", ttl=0).dropna(how="all").fillna("")
+                if not df_logs.empty:
+                    st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
+                else:
+                    st.write("ログはまだありません。")
+            except:
+                st.write("ログシートがまだ作成されていません。")
+                
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
