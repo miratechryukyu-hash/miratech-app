@@ -56,12 +56,10 @@ def write_log(user_name, action):
         pass 
 
 # ==========================================
-# 🔐 マルチテナント＆個別IDログイン認証
+# 🔐 個別IDログイン認証（QR自動ログイン廃止版）
 # ==========================================
 def check_auth():
     query_params = st.query_params
-    fid = query_params.get("fid", "")
-    token = query_params.get("key", "")
     
     if "logged_in_facility" not in st.session_state:
         st.session_state["logged_in_facility"] = None
@@ -69,29 +67,18 @@ def check_auth():
         st.session_state["current_user_name"] = None
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
+    if "is_nurse_mode" not in st.session_state:
+        st.session_state["is_nurse_mode"] = False
 
     if st.session_state["logged_in_facility"] is not None:
         return True
-
-    for key in st.secrets.keys():
-        try:
-            sec_data = st.secrets[key]
-            if "id_code" in sec_data and "token" in sec_data:
-                if fid == sec_data["id_code"] and token == sec_data["token"]:
-                    st.session_state["logged_in_facility"] = sec_data["name"]
-                    st.session_state["facility_key"] = key
-                    st.session_state["is_nurse_mode"] = True
-                    st.session_state["current_user_name"] = "現場QRスキャン"
-                    write_log("現場スタッフ(QR)", f"{sec_data['name']} のトラブル報告画面へアクセス")
-                    return True
-        except Exception:
-            pass
 
     st.warning("⚠️ miratech 琉球 医療機器管理システム")
     tab1, tab2 = st.tabs(["🔐 ログイン", "📝 新規利用申請"])
 
     with tab1:
         with st.form("login_form"):
+            st.info("QRコードからアクセスした場合も、セキュリティ保護のためログインが必要です。")
             input_id = st.text_input("👤 ユーザーID")
             input_pass = st.text_input("🔑 パスワード", type="password")
             if st.form_submit_button("ログイン", use_container_width=True):
@@ -113,9 +100,15 @@ def check_auth():
                         if saved_pass == clean_pass:
                             if saved_status == "OK":
                                 st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
-                                st.session_state["is_nurse_mode"] = False
                                 st.session_state["current_user_name"] = clean_data_str(user_info["名前"])
-                                st.session_state["is_admin"] = (clean_data_str(user_info.get("権限")) == "admin")
+                                
+                                # 権限が「admin」なら管理者画面、「user」なら現場のトラブル報告画面へ振り分け
+                                if clean_data_str(user_info.get("権限")) == "admin":
+                                    st.session_state["is_admin"] = True
+                                    st.session_state["is_nurse_mode"] = False
+                                else:
+                                    st.session_state["is_admin"] = False
+                                    st.session_state["is_nurse_mode"] = True
                                 
                                 write_log(st.session_state["current_user_name"], "ログインしました")
                                 st.rerun()
@@ -169,16 +162,6 @@ def check_auth():
 if not check_auth():
     st.stop()
 
-def get_qr_credentials():
-    for key in st.secrets.keys():
-        try:
-            sec_data = st.secrets[key]
-            if "id_code" in sec_data and "token" in sec_data:
-                return sec_data["id_code"], sec_data["token"]
-        except:
-            continue
-    return "", ""
-
 # --- ログイン後の変数 ---
 facility_name = st.session_state["logged_in_facility"]
 query_params = st.query_params
@@ -197,17 +180,20 @@ if "GEMINI_API_KEY" in st.secrets:
         st.error(f"APIキーの設定エラー: {e}")
 
 # ==========================================
-# 👩‍⚕️ 【ルートA】現場スタッフモード
+# 👩‍⚕️ 【ルートA】現場スタッフモード（権限が user の場合）
 # ==========================================
 if st.session_state.get("is_nurse_mode"):
     st.markdown(f"<h2 style='text-align: center; color: #FF4B4B;'>🚨 {facility_name}</h2>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>機器トラブル報告システム</h3>", unsafe_allow_html=True)
-    if url_me_no:
-        st.success(f"📱 対象機器: **{url_me_no}**")
+    
+    st.info("💡 QRコードを読み込んだ場合は自動でME No.が入ります。")
+    report_me_no = st.text_input("対象の機器(ME No.)", value=url_me_no)
+    
+    if report_me_no:
         with st.form("nurse_report_form"):
             rep_date = st.date_input("発生日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
             rep_dept = st.selectbox("あなたの部署", ["選択してください", "外来", "一般病棟", "療養病棟", "オペ室", "透析室", "その他"])
-            rep_name = st.text_input("報告者名")
+            rep_name = st.text_input("報告者名", value=st.session_state.get("current_user_name", ""))
             c1, c2 = st.columns(2)
             with c1:
                 err_power = st.checkbox("🔌 電源不良")
@@ -244,7 +230,7 @@ if st.session_state.get("is_nurse_mode"):
                     new_report = pd.DataFrame([{
                         "報告日": str(date.today()),
                         "発生日": str(rep_date),
-                        "ME No.": url_me_no,
+                        "ME No.": report_me_no,
                         "機種": "不明な機器",
                         "報告者": rep_name,
                         "部署": rep_dept,
@@ -255,18 +241,15 @@ if st.session_state.get("is_nurse_mode"):
                     updated_df = pd.concat([existing_data, new_report], ignore_index=True)
                     conn.update(worksheet=target_sheet, data=updated_df)
                     
-                    write_log(f"現場({rep_name})", f"{url_me_no} の故障報告を送信")
+                    write_log(f"現場({rep_name})", f"{report_me_no} の故障報告を送信")
                     
                     st.balloons()
                     st.success("✅ 報告を受け付けました。ご協力ありがとうございます。")
                 except Exception as e:
                     st.error(f"保存エラー: {e}")
 
-    else:
-        st.error("⚠️ 機器情報が読み取れません。QRコードをもう一度スキャンしてください。")
-        
-    if st.button("管理者用ログインへ"):
-        write_log(st.session_state["current_user_name"], "ログアウト(現場モード)")
+    if st.button("ログアウト"):
+        write_log(st.session_state["current_user_name"], "ログアウト")
         st.session_state["logged_in_facility"] = None
         st.session_state["is_nurse_mode"] = False
         st.session_state["current_user_name"] = None
@@ -286,10 +269,7 @@ if st.sidebar.button("ログアウト"):
 st.markdown(f"### 🏢 {facility_name}")
 st.title("医療機器点検・管理")
 
-tab_names = ["📝 点検入力", "📁 マスター", "🔍 機器カルテ・実績", "🔲 QR発行", "📸 AI登録"]
-if st.session_state.get("is_admin"):
-    tab_names.append("👥 ユーザー・ログ管理")
-
+tab_names = ["📝 点検入力", "📁 マスター", "🔍 機器カルテ・実績", "🔲 QR発行", "📸 AI登録", "👥 ユーザー・ログ管理"]
 tabs = st.tabs(tab_names)
 
 # ====== タブ1：入力画面 ======
@@ -531,7 +511,7 @@ with tabs[0]:
                             inc_o_checks["設定温度警報(マニュアル)"] = st.checkbox("設定温度警報(マニュアル)", value=True)
                             inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                         with o4:
-                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作作動", value=True)
+                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
                             inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
                             inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
 
@@ -655,8 +635,8 @@ with tabs[0]:
                 st.markdown("---")
                 st.subheader(f"🔲 {final_me_no} 専用QRコード")
                 
-                fid_code, tok = get_qr_credentials()
-                final_url = f"{APP_URL}/?fid={fid_code}&key={tok}&me_no={final_me_no}"
+                # ★ ここもURL発行ロジックを更新
+                final_url = f"{APP_URL}/?me_no={final_me_no}"
                 
                 qr = qrcode.QRCode(version=1, box_size=10, border=4)
                 qr.add_data(final_url)
@@ -885,17 +865,12 @@ with tabs[3]:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
-    # ★ ここでもQR発行時にエラーを出さず、警告だけ出すように設定
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
-            auto_fid, auto_token = get_qr_credentials()
-            
-            if not auto_fid or not auto_token:
-                st.info("💡 現場用の自動ログインキーが未設定ですが、QRコードは通常通り発行します。")
-                
-            final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+            # 💡 ここで自動ログインキーの付与を廃止！純粋なME No.だけをURLにします
+            final_url = f"{APP_URL}/?me_no={target_qr_me}"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
             qr.add_data(final_url)
