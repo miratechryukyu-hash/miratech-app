@@ -531,7 +531,7 @@ with tabs[0]:
                             inc_o_checks["設定温度警報(マニュアル)"] = st.checkbox("設定温度警報(マニュアル)", value=True)
                             inc_o_checks["設定温度警報(皮膚温)"] = st.checkbox("設定温度警報(皮膚温)", value=True)
                         with o4:
-                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作動", value=True)
+                            inc_o_checks["プローブ警報"] = st.checkbox("プローブ警報作作動", value=True)
                             inc_o_checks["停電警報"] = st.checkbox("停電警報作動", value=True)
                             inc_o_checks["キャノピ傾斜"] = st.checkbox("キャノピ傾斜動作", value=True)
 
@@ -885,36 +885,38 @@ with tabs[3]:
     st.subheader("🔲 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
+    # ★ ここでもQR発行時にエラーを出さず、警告だけ出すように設定
     target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
             auto_fid, auto_token = get_qr_credentials()
+            
             if not auto_fid or not auto_token:
-                st.error("⚠️ システムエラー：secretsファイルに施設の認証情報が見つかりません。")
-            else:
-                final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+                st.info("💡 現場用の自動ログインキーが未設定ですが、QRコードは通常通り発行します。")
                 
-                qr = qrcode.QRCode(version=1, box_size=10, border=4)
-                qr.add_data(final_url)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                
-                buf = BytesIO()
-                img.save(buf, format="PNG")
-                byte_im = buf.getvalue()
-                
-                st.success(f"「{target_qr_me}」専用のQRコードができました！")
-                
-                b64 = base64.b64encode(byte_im).decode()
-                html_img = f'''
-                <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
-                    <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
-                </a>
-                <br>
-                <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
-                '''
-                st.markdown(html_img, unsafe_allow_html=True)
+            final_url = f"{APP_URL}/?fid={auto_fid}&key={auto_token}&me_no={target_qr_me}"
+            
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(final_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            st.success(f"「{target_qr_me}」専用のQRコードができました！")
+            
+            b64 = base64.b64encode(byte_im).decode()
+            html_img = f'''
+            <a href="data:image/png;base64,{b64}" download="QR_{target_qr_me}.png">
+                <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
+            </a>
+            <br>
+            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+            '''
+            st.markdown(html_img, unsafe_allow_html=True)
         else:
             st.warning("ME No.を入力してください。")
 
