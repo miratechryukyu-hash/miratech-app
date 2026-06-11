@@ -56,11 +56,9 @@ def write_log(user_name, action):
         pass 
 
 # ==========================================
-# 🔐 個別IDログイン認証（QR自動ログイン廃止版）
+# 🔐 個別IDログイン認証（自動ログイン廃止・全員必須）
 # ==========================================
 def check_auth():
-    query_params = st.query_params
-    
     if "logged_in_facility" not in st.session_state:
         st.session_state["logged_in_facility"] = None
     if "current_user_name" not in st.session_state:
@@ -78,7 +76,7 @@ def check_auth():
 
     with tab1:
         with st.form("login_form"):
-            st.info("QRコードからアクセスした場合も、セキュリティ保護のためログインが必要です。")
+            st.info("セキュリティ保護のため、ログインが必要です。")
             input_id = st.text_input("👤 ユーザーID")
             input_pass = st.text_input("🔑 パスワード", type="password")
             if st.form_submit_button("ログイン", use_container_width=True):
@@ -102,7 +100,7 @@ def check_auth():
                                 st.session_state["logged_in_facility"] = "miratech 琉球 管理センター"
                                 st.session_state["current_user_name"] = clean_data_str(user_info["名前"])
                                 
-                                # 権限が「admin」なら管理者画面、「user」なら現場のトラブル報告画面へ振り分け
+                                # 💡 ここで権限による画面の振り分けを行います
                                 if clean_data_str(user_info.get("権限")) == "admin":
                                     st.session_state["is_admin"] = True
                                     st.session_state["is_nurse_mode"] = False
@@ -635,7 +633,7 @@ with tabs[0]:
                 st.markdown("---")
                 st.subheader(f"🔲 {final_me_no} 専用QRコード")
                 
-                # ★ ここもURL発行ロジックを更新
+                # 💡 発行されるQRコードは、純粋な「ME No.」だけのURLになります
                 final_url = f"{APP_URL}/?me_no={final_me_no}"
                 
                 qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -869,7 +867,7 @@ with tabs[3]:
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
-            # 💡 ここで自動ログインキーの付与を廃止！純粋なME No.だけをURLにします
+            # 💡 ここも純粋な「ME No.」だけのURLを発行します
             final_url = f"{APP_URL}/?me_no={target_qr_me}"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
