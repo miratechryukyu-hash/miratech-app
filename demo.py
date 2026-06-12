@@ -970,6 +970,7 @@ with tabs[4]:
             # 💡 設置場所と購入業者を手動登録側にも追加
             man_location = st.text_input("⑥ 設置場所", placeholder="例: 一般病棟")
             man_vendor = st.text_input("⑦ 購入業者", placeholder="例: 〇〇医療器")
+            man_delivery_date = st.date_input("⑧ 納入日", value=date.today())
             
             if st.form_submit_button("💾 機器マスターに直接登録する", type="primary"):
                 if not man_me_no:
