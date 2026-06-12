@@ -388,7 +388,7 @@ with tabs[0]:
                         bubble_ad_nowater = st.number_input("気泡センサーAD値 (水無し)", value=5)
 
                 elif device_category == "シリンジポンプ":
-                    with st.expander("🔍 ① 外観・作動・警報の詳細チェック", expanded=True):
+                    with st.expander(" ① 外観・作動・警報の詳細チェック", expanded=True):
                         st.write("**【外観・作動点検】**")
                         col1, col2 = st.columns(2)
                         with col1:
@@ -427,7 +427,7 @@ with tabs[0]:
 
                 elif device_category == "保育器":
                     if "閉鎖式" in incubator_type:
-                        with st.expander("🔍 閉鎖式保育器 点検項目", expanded=True):
+                        with st.expander(" 閉鎖式保育器 点検項目", expanded=True):
                             st.write("**① 外観点検**")
                             c1, c2 = st.columns(2)
                             with c1:
@@ -456,7 +456,7 @@ with tabs[0]:
                             with c6:
                                 inc_temp_meas = st.number_input("測定値 (℃)", value=36.0, step=0.1)
                     else:
-                        with st.expander("🔍 開放型保育器 点検項目", expanded=True):
+                        with st.expander(" 開放型保育器 点検項目", expanded=True):
                             st.write("**① コントロール・作動・表示点検**")
                             o1, o2 = st.columns(2)
                             with o1:
@@ -507,7 +507,7 @@ with tabs[0]:
 
         if submitted:
             if not final_me_no:
-                st.warning("⚠️ ME No. が入力されていません。")
+                st.warning(" ME No. が入力されていません。")
             else:
                 try:
                     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -518,7 +518,7 @@ with tabs[0]:
                         if existing_data is not None:
                             existing_data = existing_data.dropna(how="all").fillna("")
                     except Exception as e:
-                        st.error(f"🚨 「点検履歴」の読み込みに失敗しました。詳細: {e}")
+                        st.error(f" 「点検履歴」の読み込みに失敗しました。詳細: {e}")
                         st.stop()
                     
                     details_list = [f"【{check_type}】"]
@@ -568,10 +568,10 @@ with tabs[0]:
                         if master_df is not None:
                             master_df = master_df.dropna(how="all").fillna("")
                     except Exception as e:
-                        st.error(f"🚨 「機器マスター」の読み込みに失敗しました。詳細: {e}")
+                        st.error(f" 「機器マスター」の読み込みに失敗しました。詳細: {e}")
                         st.stop()
 
-                    # 💡 安全装置：点検保存時に、もともと登録されていた「設置場所」と「購入業者」を消さずに引き継ぐ！
+                    #  安全装置：点検保存時に、もともと登録されていた「設置場所」と「購入業者」を消さずに引き継ぐ！
                     existing_location = ""
                     existing_vendor = ""
                     if master_row is not None:
@@ -603,10 +603,10 @@ with tabs[0]:
                     write_log(inspector, f"{final_me_no} の点検データを保存({check_type})")
                     
                     st.balloons()
-                    st.success(f"✅ {final_me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
+                    st.success(f" {final_me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
                     st.markdown("---")
-                    st.subheader(f"🔲 {final_me_no} 専用QRコード")
+                    st.subheader(f" {final_me_no} 専用QRコード")
                     
                     final_url = f"{APP_URL}/?me_no={final_me_no}"
                     
@@ -625,7 +625,7 @@ with tabs[0]:
                         <img src="data:image/png;base64,{b64}" width="150" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
                     </a>
                     <br>
-                    <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+                    <p style="font-size: 14px; color: gray;"> QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
                     '''
                     st.markdown(html_img, unsafe_allow_html=True)
 
@@ -636,7 +636,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("🏥 機器台帳 ＆ データ管理")
     
-    sub_m1, sub_m2 = st.tabs(["📊 資産統計 ＆ 一覧表示", "✏️ 登録データの修正・変更"])
+    sub_m1, sub_m2 = st.tabs([" 資産統計 ＆ 一覧表示", " 登録データの修正・変更"])
 
     with sub_m1:
         try:
@@ -648,7 +648,7 @@ with tabs[1]:
                 df_m_stats = pd.DataFrame()
                 
             if not df_m_stats.empty and "カテゴリ" in df_m_stats.columns:
-                st.markdown("#### 📊 現在の院内保有台数サマリー")
+                st.markdown("####  現在の院内保有台数サマリー")
                 total_devices = len(df_m_stats)
                 
                 cat_counts = df_m_stats["カテゴリ"].value_counts().reset_index()
@@ -657,18 +657,18 @@ with tabs[1]:
                 
                 col_stat1, col_stat2 = st.columns([1, 2])
                 with col_stat1:
-                    st.metric("📦 総管理機器数", f"{total_devices} 台")
+                    st.metric(" 総管理機器数", f"{total_devices} 台")
                     st.dataframe(cat_counts, hide_index=True, use_container_width=True)
                 with col_stat2:
                     st.bar_chart(cat_counts, x="機器カテゴリー", y="保有台数（台）", color="#ff9f43")
                 st.markdown("---")
                 
         except Exception as e:
-            st.error(f"🚨 統計データの集計中にエラーが発生しました: {e}")
+            st.error(f" 統計データの集計中にエラーが発生しました: {e}")
             
-        st.markdown("#### 📂 各種シートの詳細表示")
+        st.markdown("####  各種シートの詳細表示")
         view_cat_master = st.selectbox("表示するシートを切り替え", ["機器マスター", "点検履歴", "故障報告"], key="master_cat")
-        if st.button("🔄 台帳データを最新にする"):
+        if st.button(" 台帳データを最新にする"):
             st.cache_data.clear()
             
         try:
@@ -679,13 +679,13 @@ with tabs[1]:
             else:
                 st.dataframe(df, hide_index=True, use_container_width=True)
         except Exception as e:
-            st.error(f"🚨 接続エラー: {e}")
+            st.error(f" 接続エラー: {e}")
 
     with sub_m2:
-        st.markdown("#### ⚙️ 機器データ（シリアル・機種など）の修正")
+        st.markdown("####  機器データ（シリアル・機種など）の修正")
         st.write("ME No.を入力すると現在のデータが呼び出され、内容を上書き修正できます。")
 
-        edit_me_no = st.text_input("✏️ 修正したい機器の「ME No.」を入力", placeholder="例: Y0001", key="edit_me_input").strip()
+        edit_me_no = st.text_input(" 修正したい機器の「ME No.」を入力", placeholder="例: Y0001", key="edit_me_input").strip()
 
         if edit_me_no:
             try:
@@ -699,7 +699,7 @@ with tabs[1]:
                     target_row = df_master_edit[master_me_nos == clean_edit_me_no].iloc[0]
 
                     with st.form("edit_master_form"):
-                        st.info(f"💡 {clean_edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
+                        st.info(f" {clean_edit_me_no} のデータを修正します。直したい箇所を書き換えて「保存」を押してください。")
                         
                         new_cat = st.text_input("カテゴリ", value=clean_data_str(target_row.get("カテゴリ", "")))
                         new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=clean_data_str(target_row.get("機種", "")))
@@ -709,7 +709,7 @@ with tabs[1]:
                         new_location = st.text_input("設置場所", value=clean_data_str(target_row.get("設置場所", "")))
                         new_vendor = st.text_input("購入業者", value=clean_data_str(target_row.get("購入業者", "")))
 
-                        if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
+                        if st.form_submit_button(" 変更を上書き保存する", type="primary"):
                             
                             safe_new_sn = protect_zeros(new_sn)
 
@@ -737,10 +737,10 @@ with tabs[1]:
                                 pass 
                             
                             st.cache_data.clear() 
-                            st.success(f"✅ {clean_edit_me_no} のデータを最新に修正し、過去の履歴にも完全に同期しました！")
+                            st.success(f" {clean_edit_me_no} のデータを最新に修正し、過去の履歴にも完全に同期しました！")
                             write_log(st.session_state.get("current_user_name", "管理者"), f"{clean_edit_me_no} のデータを修正・同期")
                 else:
-                    st.warning("⚠️ 指定された ME No. は登録されていません。")
+                    st.warning(" 指定された ME No. は登録されていません。")
             except Exception as e:
                 st.error(f"データ取得エラー: {e}")
 
@@ -764,10 +764,10 @@ with tabs[2]:
         except Exception:
             df_history = pd.DataFrame()
 
-        sub_tab1, sub_tab2 = st.tabs(["📋 機器カルテ（ワンタッチ照合）", "📈 日次点検実績（グラフ）"])
+        sub_tab1, sub_tab2 = st.tabs([" 機器カルテ（ワンタッチ照合）", " 日次点検実績（グラフ）"])
 
         with sub_tab1:
-            st.write("👇 下の一覧表から、詳細を見たい機器の行をタップ（クリック）してください")
+            st.write(" 下の一覧表から、詳細を見たい機器の行をタップ（クリック）してください")
             if not df_master.empty:
                 selection_event = st.dataframe(
                     df_master,
@@ -790,12 +790,12 @@ with tabs[2]:
                         hist_df = df_history[clean_hist_search_me == target_me].iloc[::-1]
                         
                         if not hist_df.empty:
-                            st.write("#### 📝 過去の点検・修理履歴")
+                            st.write("####  過去の点検・修理履歴")
                             st.dataframe(hist_df, use_container_width=True, hide_index=True)
                             
                             last_date = clean_data_str(hist_df.iloc[0].get("点検日", "-"))
                             last_result = clean_data_str(hist_df.iloc[0].get("判定", "-"))
-                            st.success(f"📌 最新の点検日: {last_date} ／ 判定: {last_result}")
+                            st.success(f" 最新の点検日: {last_date} ／ 判定: {last_result}")
                         else:
                             st.info("この機器の点検・修理履歴はありません。")
                     else:
@@ -806,7 +806,7 @@ with tabs[2]:
         with sub_tab2:
             if not df_history.empty and "点検日" in df_history.columns:
                 df_history["点検日"] = df_history["点検日"].astype(str)
-                st.markdown("#### 📈 日別点検件数の推移")
+                st.markdown("####  日別点検件数の推移")
                 
                 daily_counts = df_history["点検日"].value_counts().reset_index()
                 daily_counts.columns = ["点検日", "点検件数（台）"]
@@ -822,12 +822,12 @@ with tabs[2]:
                     st.write("▼ 日付ごとの合計台数")
                     st.dataframe(daily_counts.iloc[::-1], use_container_width=True, hide_index=True)
 
-                st.markdown("##### 📅 特定の日の点検内訳を確認する")
+                st.markdown("#####  特定の日の点検内訳を確認する")
                 target_date = st.date_input("確認したい日付を選択", date.today())
                 
                 day_detail_df = df_history[df_history["点検日"] == str(target_date)]
                 if not day_detail_df.empty:
-                    st.success(f"📌 {target_date} は 合計 **{len(day_detail_df)} 台** の点検が完了しています。")
+                    st.success(f" {target_date} は 合計 **{len(day_detail_df)} 台** の点検が完了しています。")
                     st.dataframe(day_detail_df, use_container_width=True, hide_index=True)
                 else:
                     st.info(f"選択された日付（{target_date}）の点検データはありません。")
@@ -835,14 +835,14 @@ with tabs[2]:
                 st.info("💡 集計できる点検履歴データがまだありません。")
 
     except Exception as e:
-        st.error(f"🚨 システムエラー: スプレッドシートの設定等を確認してください。詳細: {e}")
+        st.error(f" システムエラー: スプレッドシートの設定等を確認してください。詳細: {e}")
 
 # ====== タブ4：QRコード発行機能 ======
 with tabs[3]:
-    st.subheader("🔲 機器用QRコードの作成")
+    st.subheader(" 機器用QRコードの作成")
     st.write("対象の「ME No.」を入力すると、機器に貼り付ける用のQRコードが作成されます。")
     
-    target_qr_me = st.text_input("🔤 QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
+    target_qr_me = st.text_input(" QRコードを作りたい「ME No.」を入力", placeholder="例: Y0001")
     
     if st.button("QRコードを作成する"):
         if target_qr_me:
@@ -865,7 +865,7 @@ with tabs[3]:
                 <img src="data:image/png;base64,{b64}" width="200" style="border: 2px solid #eee; padding: 10px; border-radius: 10px; background-color: white;">
             </a>
             <br>
-            <p style="font-size: 14px; color: gray;">👆 QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
+            <p style="font-size: 14px; color: gray;"> QRコードを<b>タップ（クリック）</b>すると直接ダウンロードされます。<br>スマホの場合は<b>長押しして「画像を保存」</b>も可能です。</p>
             '''
             st.markdown(html_img, unsafe_allow_html=True)
         else:
@@ -873,15 +873,15 @@ with tabs[3]:
 
 # ====== タブ5：新規機器の直接登録ダッシュボード ======
 with tabs[4]:
-    st.subheader("🆕 新規機器の直接登録 (AIスキャン / 手動)")
+    st.subheader(" 新規機器の直接登録 (AIスキャン / 手動)")
     st.write("ここで登録した機器データは、直接「機器マスター」へ保存されます。点検は登録後に「点検入力」タブで行えます。")
     
-    reg_mode = st.radio("データの入力方法を選択してください", ["📸 AI銘板スキャナー", "✏️ 手動で情報を入力"], horizontal=True)
+    reg_mode = st.radio("データの入力方法を選択してください", [" AI銘板スキャナー", " 手動で情報を入力"], horizontal=True)
     
-    if reg_mode == "📸 AI銘板スキャナー":
-        st.info("💡 新しい機器の銘板を撮影すると、AIが情報を読み取ってくれます。")
+    if reg_mode == " AI銘板スキャナー":
+        st.info(" 新しい機器の銘板を撮影すると、AIが情報を読み取ってくれます。")
         if ai_model is None:
-            st.error("❌ APIキーが設定されていないか、ライブラリのバージョンが古いです。")
+            st.error(" APIキーが設定されていないか、ライブラリのバージョンが古いです。")
         else:
             img_file = st.camera_input("銘板（シール）を撮影してください", key="ai_camera")
             
@@ -911,10 +911,10 @@ with tabs[4]:
                             else:
                                 st.warning("文字が見つかりませんでした。ブレていないか確認してもう一度撮影してください。")
                         except Exception as e:
-                            st.error(f"🚨 システムエラー: {e}")
+                            st.error(f" システムエラー: {e}")
                 
                 if st.session_state.get("scan_model") is not None:
-                    st.success("✅ AIの読み取りが完了しました！以下の内容を確認し、追加情報を入れて登録してください。")
+                    st.success(" AIの読み取りが完了しました！以下の内容を確認し、追加情報を入れて登録してください。")
                     with st.form("ai_direct_reg_form"):
                         ai_me_no = st.text_input("① ME No. (必須)", placeholder="例: Y0001")
                         ai_cat = st.selectbox("② 機器種類 (カテゴリ)", categories_list)
@@ -925,7 +925,7 @@ with tabs[4]:
                         ai_location = st.text_input("⑥ 設置場所", placeholder="例: 中央材料室")
                         ai_vendor = st.text_input("⑦ 購入業者", placeholder="例: 〇〇メディカル")
                         
-                        if st.form_submit_button("💾 機器マスターに直接登録する", type="primary"):
+                        if st.form_submit_button(" 機器マスターに直接登録する", type="primary"):
                             if not ai_me_no:
                                 st.error("ME No. は必須項目です！")
                             else:
@@ -935,7 +935,7 @@ with tabs[4]:
                                     clean_db_me_reg = clean_series(df_master_reg["ME No."])
                                     
                                     if clean_data_str(ai_me_no) in clean_db_me_reg.values:
-                                        st.error(f"⚠️ {ai_me_no} は既に登録されています。別のME No.を指定してください。")
+                                        st.error(f" {ai_me_no} は既に登録されています。別のME No.を指定してください。")
                                     else:
                                         new_master_row = pd.DataFrame([{
                                             "ME No.": protect_zeros(ai_me_no),
@@ -953,7 +953,7 @@ with tabs[4]:
                                         conn.update(worksheet="機器マスター", data=updated_master_reg)
                                         
                                         write_log(st.session_state.get("current_user_name", "管理者"), f"{ai_me_no} をAIスキャンから新規登録")
-                                        st.success(f"✅ {ai_me_no} を機器マスターに直接登録しました！「点検入力」タブから検索して点検を行えます。")
+                                        st.success(f" {ai_me_no} を機器マスターに直接登録しました！「点検入力」タブから検索して点検を行えます。")
                                         st.balloons()
                                         st.session_state["scan_model"] = None 
                                 except Exception as e:
@@ -963,7 +963,12 @@ with tabs[4]:
         st.info("💡 新しい機器の情報を手動で直接マスター台帳に登録します。")
         with st.form("manual_direct_reg_form"):
             man_me_no = st.text_input("① ME No. (必須)", placeholder="例: Y0001")
-            man_cat = st.selectbox("② 機器種類 (カテゴリ)", categories_list)
+          # 💡 カテゴリ選択 ＆ 手入力のハイブリッド
+        cat_selection = st.selectbox("② 機器種類 (カテゴリ)", categories_list + ["その他(手入力)"])
+        if cat_selection == "その他(手入力)":
+            man_cat = st.text_input("② 機器種類を入力してください")
+        else:
+            man_cat = cat_selection
             man_model = st.text_input("③ 型式 (機種)", placeholder="例: TE-131A")
             man_sn = st.text_input("④ 製造番号 (S/N)", placeholder="例: 12345678")
             man_year = st.text_input("⑤ 製造年月日 / 製造年", placeholder="例: 2014-06-12")
