@@ -151,6 +151,7 @@ if not check_auth():
 
 # --- ログイン後の変数 ---
 facility_name = st.session_state["logged_in_facility"]
+# 💡 ここで「QRコードから来たか（URLにme_noがあるか）」を判定します
 url_me_no = st.query_params.get("me_no", "")
 categories_list = ["輸液ポンプ", "顕微鏡", "保育器", "分娩監視装置", "ネブライザー", "透視装置","無影灯","血圧計","超音波診断装置",
                    "ドプラ","検診台","血液ガス分析装置","吸引器類","加湿器類","分娩台","ベビーコット","哺乳瓶消毒器","煮沸消毒器","パルスオキシメーター",
@@ -232,6 +233,7 @@ if url_me_no:
             except Exception as e:
                 st.error(f"保存エラー: {e}")
 
+    # ログアウト時にURLのパラメータ(me_no)を消去して初期状態に戻す
     if st.button("ログアウト"):
         write_log(st.session_state["current_user_name"], "ログアウト")
         st.session_state["logged_in_facility"] = None
@@ -239,10 +241,10 @@ if url_me_no:
         st.query_params.clear() 
         st.rerun()
         
-    st.stop()
+    st.stop() # 💡 ここでストップさせるので、QRから来た人は絶対に下の管理画面を見られません！
 
 # ==========================================
-# 👨‍🔧 【ルートA】直接アクセスした場合（管理画面へ）
+# 👨‍🔧 【ルートA】QRを読まなかった場合（直接アクセスした場合は管理画面）
 # ==========================================
 st.sidebar.success(f"👤 ログイン中: {st.session_state.get('current_user_name', '不明')}")
 if st.sidebar.button("ログアウト"):
@@ -259,7 +261,8 @@ tabs = st.tabs(tab_names)
 
 # ====== タブ1：入力画面 ======
 with tabs[0]:
-    input_keyword = st.text_input("🔍 ME No. または 製造番号(S/N) を入力して検索", placeholder="例: Y0001 または 12345678").strip()
+    default_search_val = st.session_state.get("scan_sn", "")
+    input_keyword = st.text_input("🔍 ME No. または 製造番号(S/N) を入力して検索", value=default_search_val, placeholder="例: Y0001 または 12345678").strip()
 
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -325,7 +328,7 @@ with tabs[0]:
             with col_form1: 
                 check_date = st.date_input("作業日", value=st.session_state["last_check_date"], min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
             with col_form2: 
-                st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}", disabled=True)
+                st.text_input("対象機器 (確認用)", value=f"ME No: {final_me_no} / SN: {final_sn}" if is_registered or input_keyword else "", disabled=True)
             
             chk_e1=chk_e2=chk_e3=chk_e4=chk_e5=chk_e6=chk_e7 = False
             chk_a1=chk_a2=chk_a3=chk_a4 = False
@@ -568,12 +571,21 @@ with tabs[0]:
                         st.error(f"🚨 「機器マスター」の読み込みに失敗しました。詳細: {e}")
                         st.stop()
 
+                    # 💡 安全装置：点検保存時に、もともと登録されていた「設置場所」と「購入業者」を消さずに引き継ぐ！
+                    existing_location = ""
+                    existing_vendor = ""
+                    if master_row is not None:
+                        existing_location = clean_data_str(master_row.get("設置場所", ""))
+                        existing_vendor = clean_data_str(master_row.get("購入業者", ""))
+
                     new_master_entry = pd.DataFrame([{
                         "ME No.": safe_final_me_no,
                         "カテゴリ": device_category,
                         "機種": f"{device_category}({device_model})",
                         "製造番号": safe_final_sn,
                         "製造年": scan_year_val,
+                        "設置場所": existing_location,
+                        "購入業者": existing_vendor,
                         "最終点検日": str(check_date),
                         "最終判定": f"{result}({check_type})",
                         "最終実施者": inspector
@@ -693,6 +705,9 @@ with tabs[1]:
                         new_model = st.text_input("機種 (例: 輸液ポンプ(TE-131A))", value=clean_data_str(target_row.get("機種", "")))
                         new_sn = st.text_input("製造番号 (S/N)", value=clean_data_str(target_row.get("製造番号", "")))
                         new_year = st.text_input("製造年", value=clean_data_str(target_row.get("製造年", "")))
+                        # 💡 編集画面でも設置場所と購入業者を直せるように追加！
+                        new_location = st.text_input("設置場所", value=clean_data_str(target_row.get("設置場所", "")))
+                        new_vendor = st.text_input("購入業者", value=clean_data_str(target_row.get("購入業者", "")))
 
                         if st.form_submit_button("💾 変更を上書き保存する", type="primary"):
                             
@@ -703,6 +718,8 @@ with tabs[1]:
                             df_master_edit.loc[mask_m, "機種"] = new_model
                             df_master_edit.loc[mask_m, "製造番号"] = safe_new_sn
                             df_master_edit.loc[mask_m, "製造年"] = new_year
+                            df_master_edit.loc[mask_m, "設置場所"] = new_location
+                            df_master_edit.loc[mask_m, "購入業者"] = new_vendor
                             conn.update(worksheet="機器マスター", data=df_master_edit)
 
                             try:
@@ -854,7 +871,7 @@ with tabs[3]:
         else:
             st.warning("ME No.を入力してください。")
 
-# ====== タブ5：新規機器の直接登録ダッシュボード（完全リニューアル） ======
+# ====== タブ5：新規機器の直接登録ダッシュボード ======
 with tabs[4]:
     st.subheader("🆕 新規機器の直接登録 (AIスキャン / 手動)")
     st.write("ここで登録した機器データは、直接「機器マスター」へ保存されます。点検は登録後に「点検入力」タブで行えます。")
@@ -897,13 +914,16 @@ with tabs[4]:
                             st.error(f"🚨 システムエラー: {e}")
                 
                 if st.session_state.get("scan_model") is not None:
-                    st.success("✅ AIの読み取りが完了しました！以下の内容を確認し、ME No.を追加して直接登録してください。")
+                    st.success("✅ AIの読み取りが完了しました！以下の内容を確認し、追加情報を入れて登録してください。")
                     with st.form("ai_direct_reg_form"):
                         ai_me_no = st.text_input("① ME No. (必須)", placeholder="例: Y0001")
                         ai_cat = st.selectbox("② 機器種類 (カテゴリ)", categories_list)
                         ai_model = st.text_input("③ 型式 (機種)", value=st.session_state.get("scan_model", ""))
                         ai_sn = st.text_input("④ 製造番号 (S/N)", value=st.session_state.get("scan_sn", ""))
                         ai_year = st.text_input("⑤ 製造年月日 / 製造年", value=st.session_state.get("scan_year", ""))
+                        # 💡 設置場所と購入業者をAI登録側にも追加
+                        ai_location = st.text_input("⑥ 設置場所", placeholder="例: 中央材料室")
+                        ai_vendor = st.text_input("⑦ 購入業者", placeholder="例: 〇〇メディカル")
                         
                         if st.form_submit_button("💾 機器マスターに直接登録する", type="primary"):
                             if not ai_me_no:
@@ -923,6 +943,8 @@ with tabs[4]:
                                             "機種": f"{ai_cat}({ai_model})",
                                             "製造番号": protect_zeros(ai_sn),
                                             "製造年": ai_year,
+                                            "設置場所": ai_location,
+                                            "購入業者": ai_vendor,
                                             "最終点検日": "",
                                             "最終判定": "",
                                             "最終実施者": ""
@@ -933,7 +955,7 @@ with tabs[4]:
                                         write_log(st.session_state.get("current_user_name", "管理者"), f"{ai_me_no} をAIスキャンから新規登録")
                                         st.success(f"✅ {ai_me_no} を機器マスターに直接登録しました！「点検入力」タブから検索して点検を行えます。")
                                         st.balloons()
-                                        st.session_state["scan_model"] = None # 登録完了後はAIデータをリセット
+                                        st.session_state["scan_model"] = None 
                                 except Exception as e:
                                     st.error(f"登録エラー: {e}")
 
@@ -945,6 +967,9 @@ with tabs[4]:
             man_model = st.text_input("③ 型式 (機種)", placeholder="例: TE-131A")
             man_sn = st.text_input("④ 製造番号 (S/N)", placeholder="例: 12345678")
             man_year = st.text_input("⑤ 製造年月日 / 製造年", placeholder="例: 2014-06-12")
+            # 💡 設置場所と購入業者を手動登録側にも追加
+            man_location = st.text_input("⑥ 設置場所", placeholder="例: 一般病棟")
+            man_vendor = st.text_input("⑦ 購入業者", placeholder="例: 〇〇医療器")
             
             if st.form_submit_button("💾 機器マスターに直接登録する", type="primary"):
                 if not man_me_no:
@@ -964,6 +989,8 @@ with tabs[4]:
                                 "機種": f"{man_cat}({man_model})",
                                 "製造番号": protect_zeros(man_sn),
                                 "製造年": man_year,
+                                "設置場所": man_location,
+                                "購入業者": man_vendor,
                                 "最終点検日": "",
                                 "最終判定": "",
                                 "最終実施者": ""
