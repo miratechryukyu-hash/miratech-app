@@ -29,7 +29,7 @@ def safe_read_worksheet(conn, worksheet_name, default_columns=None):
             if i < 2:
                 time.sleep(1) # 1秒待って再試行
             else:
-                st.error(f"スプレッドシート（{worksheet_name}）の読み込みに失敗しました。通信環境が良い場所で再度Enterを押してください。")
+                st.error(f"スプレッドシート（{worksheet_name}）の読み込みに失敗しました。通信環境が良い場所で再度お試しください。")
     return pd.DataFrame(columns=default_columns) if default_columns else pd.DataFrame()
 
 # データお掃除用の共通関数
@@ -174,6 +174,15 @@ if "GEMINI_API_KEY" in st.secrets:
     except Exception as e:
         st.error(f"APIキーの設定エラー: {e}")
 
+# 共通データベースの取得（購入業者プルダウン用）
+conn = st.connection("gsheets", type=GSheetsConnection)
+df_master_global = safe_read_worksheet(conn, "機器マスター")
+existing_vendors = []
+if not df_master_global.empty and "購入業者" in df_master_global.columns:
+    # 登録済みの業者を抽出し、空白を除外
+    existing_vendors = [v for v in df_master_global["購入業者"].unique() if str(v).strip() != "" and str(v).lower() != "nan"]
+vendor_options = existing_vendors + ["新規追加(手入力)"]
+
 # ==========================================
 # 【ルートB】QRコードを読み取った場合（トラブル報告画面へ直行）
 # ==========================================
@@ -213,7 +222,6 @@ if url_me_no:
                 symptom_str = "記載なし"
 
             try:
-                conn = st.connection("gsheets", type=GSheetsConnection)
                 existing_data = safe_read_worksheet(conn, "故障報告", ["報告日", "発生日", "ME No.", "機種", "報告者", "部署", "症状", "対応状況"])
                 
                 new_report = pd.DataFrame([{
@@ -232,7 +240,6 @@ if url_me_no:
                 
                 write_log(f"現場({rep_name})", f"{url_me_no} の故障報告を送信")
                 
-                st.balloons()
                 st.success("報告を受け付けました。ご協力ありがとうございます。")
             except Exception as e:
                 st.error(f"保存エラー: {e}")
@@ -266,23 +273,17 @@ tabs = st.tabs(tab_names)
 with tabs[0]:
     input_keyword = st.text_input("ME No. または 製造番号(S/N) を入力して検索", placeholder="例: Y0001 または 12345678").strip()
 
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_master_search = safe_read_worksheet(conn, "機器マスター")
-    except:
-        df_master_search = pd.DataFrame()
-
     master_row = None
-    if input_keyword and not df_master_search.empty:
+    if input_keyword and not df_master_global.empty:
         clean_keyword = clean_data_str(input_keyword)
-        clean_db_me = clean_series(df_master_search["ME No."])
-        clean_db_sn = clean_series(df_master_search["製造番号"])
+        clean_db_me = clean_series(df_master_global["ME No."])
+        clean_db_sn = clean_series(df_master_global["製造番号"])
         
-        matched_me = df_master_search[clean_db_me == clean_keyword]
+        matched_me = df_master_global[clean_db_me == clean_keyword]
         if not matched_me.empty:
             master_row = matched_me.iloc[0]
         else:
-            matched_sn = df_master_search[clean_db_sn == clean_keyword]
+            matched_sn = df_master_global[clean_db_sn == clean_keyword]
             if not matched_sn.empty:
                 master_row = matched_sn.iloc[0]
 
@@ -485,7 +486,7 @@ with tabs[0]:
                             with o5:
                                 inc_o_checks["蘇生装置"] = st.checkbox("蘇生装置の機能点検・異常なし", value=True)
                                 inc_o_checks["酸素ブレンダ作動"] = st.checkbox("酸素ブレンダ作動確認", value=True)
-                                inc_o_checks["供給ガス警報"] = st.checkbox("供給ガス警報が発生するか", value=True)
+                                inc_o_checks["供給ガス警報"] = st.checkbox("供給ガスが発生するか", value=True)
                             with o6:
                                 inc_o_checks["吸引・流量計"] = st.checkbox("吸引ユニット・酸素流量計正常", value=True)
                                 inc_o_checks["外装・キャノピ・ネジ類"] = st.checkbox("支柱・キャノピ・反射板・ネジ等", value=True)
@@ -511,7 +512,6 @@ with tabs[0]:
                 st.warning("ME No. が入力されていません。")
             else:
                 try:
-                    conn = st.connection("gsheets", type=GSheetsConnection)
                     existing_data = safe_read_worksheet(conn, "点検履歴")
                     
                     details_list = [f"【{check_type}】"]
@@ -560,10 +560,15 @@ with tabs[0]:
                     existing_location = ""
                     existing_vendor = ""
                     existing_delivery = ""
+                    existing_acq_type = ""
+                    existing_price = ""
+
                     if master_row is not None:
                         existing_location = clean_data_str(master_row.get("設置場所", ""))
                         existing_vendor = clean_data_str(master_row.get("購入業者", ""))
                         existing_delivery = clean_data_str(master_row.get("納入日", ""))
+                        existing_acq_type = clean_data_str(master_row.get("導入形態", ""))
+                        existing_price = clean_data_str(master_row.get("購入金額", ""))
 
                     new_master_entry = pd.DataFrame([{
                         "ME No.": safe_final_me_no,
@@ -573,6 +578,8 @@ with tabs[0]:
                         "製造年": scan_year_val,
                         "設置場所": existing_location,
                         "購入業者": existing_vendor,
+                        "導入形態": existing_acq_type,
+                        "購入金額": existing_price,
                         "納入日": existing_delivery,
                         "最終点検日": str(check_date),
                         "最終判定": f"{result}({check_type})",
@@ -590,7 +597,6 @@ with tabs[0]:
                     
                     write_log(inspector, f"{final_me_no} の点検データを保存({check_type})")
                     
-                    st.balloons()
                     st.success(f"{final_me_no} の点検記録と、機器マスター台帳の更新が完了しました！")
 
                     st.markdown("---")
@@ -622,17 +628,16 @@ with tabs[0]:
 
 # ====== タブ2：マスター ======
 with tabs[1]:
-    st.subheader("🏥 機器台帳 ＆ データ管理")
+    st.subheader("機器台帳 ＆ データ管理")
     
     sub_m1, sub_m2 = st.tabs(["資産統計 ＆ 一覧表示", "登録データの修正・変更"])
 
     with sub_m1:
         try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
             df_m_stats = safe_read_worksheet(conn, "機器マスター")
                 
             if not df_m_stats.empty and "カテゴリ" in df_m_stats.columns:
-                st.markdown("#### 📊 現在の院内保有台数サマリー")
+                st.markdown("#### 現在の院内保有台数サマリー")
                 total_devices = len(df_m_stats)
                 
                 cat_counts = df_m_stats["カテゴリ"].value_counts().reset_index()
@@ -656,7 +661,6 @@ with tabs[1]:
             st.cache_data.clear()
             
         try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
             df = safe_read_worksheet(conn, view_cat_master)
             if df.empty:
                 st.info(f"「{view_cat_master}」シートにはまだデータがありません。")
@@ -666,14 +670,13 @@ with tabs[1]:
             st.error(f"接続エラー: {e}")
 
     with sub_m2:
-        st.markdown("#### 機器データ（シリアル・機種など）の修正")
+        st.markdown("#### 機器データの修正")
         st.write("ME No.を入力すると現在のデータが呼び出され、内容を上書き修正できます。")
 
         edit_me_no = st.text_input("修正したい機器の「ME No.」を入力", placeholder="例: Y0001", key="edit_me_input").strip()
 
         if edit_me_no:
             try:
-                conn = st.connection("gsheets", type=GSheetsConnection)
                 df_master_edit = safe_read_worksheet(conn, "機器マスター")
 
                 clean_edit_me_no = clean_data_str(edit_me_no)
@@ -691,8 +694,27 @@ with tabs[1]:
                         new_year = st.text_input("製造年", value=clean_data_str(target_row.get("製造年", "")))
                         
                         new_location = st.text_input("設置場所", value=clean_data_str(target_row.get("設置場所", "")))
-                        new_vendor = st.text_input("購入業者", value=clean_data_str(target_row.get("購入業者", "")))
                         
+                        # 業者をプルダウン + 手入力対応
+                        saved_vendor = clean_data_str(target_row.get("購入業者", ""))
+                        if saved_vendor and saved_vendor not in vendor_options:
+                            vendor_options.insert(0, saved_vendor)
+                        
+                        sel_idx = vendor_options.index(saved_vendor) if saved_vendor in vendor_options else 0
+                        edit_vendor_sel = st.selectbox("購入業者", vendor_options, index=sel_idx)
+                        if edit_vendor_sel == "新規追加(手入力)":
+                            new_vendor = st.text_input("購入業者を新規入力")
+                        else:
+                            new_vendor = edit_vendor_sel
+
+                        # 導入形態と購入金額の追加
+                        saved_acq = clean_data_str(target_row.get("導入形態", "購入"))
+                        acq_options = ["購入", "リース", "レンタル", "その他"]
+                        if saved_acq not in acq_options: acq_options.append(saved_acq)
+                        new_acq_type = st.selectbox("導入形態", acq_options, index=acq_options.index(saved_acq))
+                        
+                        new_price = st.text_input("購入金額(円)", value=clean_data_str(target_row.get("購入金額", "")))
+
                         saved_delivery_str = clean_data_str(target_row.get("納入日", ""))
                         try:
                             saved_delivery_date = pd.to_datetime(saved_delivery_str).date()
@@ -711,6 +733,8 @@ with tabs[1]:
                             df_master_edit.loc[mask_m, "製造年"] = new_year
                             df_master_edit.loc[mask_m, "設置場所"] = new_location
                             df_master_edit.loc[mask_m, "購入業者"] = new_vendor
+                            df_master_edit.loc[mask_m, "導入形態"] = new_acq_type
+                            df_master_edit.loc[mask_m, "購入金額"] = new_price
                             df_master_edit.loc[mask_m, "納入日"] = str(new_delivery)
                             conn.update(worksheet="機器マスター", data=df_master_edit)
 
@@ -744,7 +768,6 @@ with tabs[2]:
         st.cache_data.clear()
         
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
         df_master = safe_read_worksheet(conn, "機器マスター")
         df_history = safe_read_worksheet(conn, "点検履歴")
 
@@ -855,7 +878,7 @@ with tabs[3]:
         else:
             st.warning("ME No.を入力してください。")
 
-# ====== タブ5：新規機器の登録（カテゴリ選択 ＆ 手入力対応版） ======
+# ====== タブ5：新規機器の登録 ======
 with tabs[4]:
     st.subheader("新規機器の直接登録")
     st.write("ここで登録した機器データは、直接「機器マスター」へ保存されます。点検は登録後に「点検入力」タブで行えます。")
@@ -907,28 +930,37 @@ with tabs[4]:
 
     if show_form:
         with st.form("direct_reg_form"):
-            man_me_no = st.text_input("① ME No. (必須)", placeholder="例: Y0001")
+            man_me_no = st.text_input("ME No. (必須)", placeholder="例: Y0001")
             
-            # カテゴリ選択 ＆ 手入力のハイブリッド
-            cat_selection = st.selectbox("② 機器種類 (カテゴリ)", categories_list + ["その他(手入力)"])
+            cat_selection = st.selectbox("機器種類 (カテゴリ)", categories_list + ["その他(手入力)"])
             if cat_selection == "その他(手入力)":
-                man_cat = st.text_input("② 機器種類を入力してください", placeholder="例: 保育器")
+                man_cat = st.text_input("機器種類を入力してください", placeholder="例: 保育器")
             else:
                 man_cat = cat_selection
                 
-            man_model = st.text_input("③ 型式 (機種)", value=st.session_state.get("scan_model", ""), placeholder="例: TE-131A")
-            man_sn = st.text_input("④ 製造番号 (S/N)", value=st.session_state.get("scan_sn", ""), placeholder="例: 12345678")
-            man_year = st.text_input("⑤ 製造年", value=st.session_state.get("scan_year", ""), placeholder="例: 2014-06-12")
-            man_location = st.text_input("⑥ 設置場所", placeholder="例: 一般病棟")
-            man_vendor = st.text_input("⑦ 購入業者", placeholder="例: 〇〇医療器")
-            man_delivery = st.date_input("⑧ 納入日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
+            man_model = st.text_input("型式 (機種)", value=st.session_state.get("scan_model", ""), placeholder="例: TE-131A")
+            man_sn = st.text_input("製造番号 (S/N)", value=st.session_state.get("scan_sn", ""), placeholder="例: 12345678")
+            man_year = st.text_input("製造年", value=st.session_state.get("scan_year", ""), placeholder="例: 2014-06-12")
+            man_location = st.text_input("設置場所", placeholder="例: 一般病棟")
+            
+            # 購入業者のプルダウン + 手入力対応
+            vendor_selection = st.selectbox("購入業者", vendor_options)
+            if vendor_selection == "新規追加(手入力)":
+                man_vendor = st.text_input("購入業者を入力してください", placeholder="例: 〇〇医療器")
+            else:
+                man_vendor = vendor_selection
+                
+            # 導入形態と購入金額の追加
+            man_acq_type = st.selectbox("導入形態", ["購入", "リース", "レンタル", "その他"])
+            man_price = st.text_input("購入金額(円)", placeholder="例: 1500000")
+
+            man_delivery = st.date_input("納入日", value=date.today(), min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
             
             if st.form_submit_button("機器マスターに登録する", type="primary"):
                 if not man_me_no or not man_cat:
                     st.error("ME No. と 機器種類 は必須です！")
                 else:
                     try:
-                        conn = st.connection("gsheets", type=GSheetsConnection)
                         df_master_reg = safe_read_worksheet(conn, "機器マスター")
                         clean_db_me_reg = clean_series(df_master_reg["ME No."])
                         
@@ -943,6 +975,8 @@ with tabs[4]:
                                 "製造年": man_year,
                                 "設置場所": man_location,
                                 "購入業者": man_vendor,
+                                "導入形態": man_acq_type,
+                                "購入金額": man_price,
                                 "納入日": str(man_delivery),
                                 "最終点検日": "",
                                 "最終判定": "",
@@ -953,7 +987,6 @@ with tabs[4]:
                             
                             write_log(st.session_state.get("current_user_name", "管理者"), f"{man_me_no} を新規登録")
                             st.success(f"{man_me_no} を機器マスターに登録しました！「点検入力」タブから検索して点検を行えます。")
-                            st.balloons()
                             
                             st.session_state["scan_model"] = None 
                             st.session_state["scan_sn"] = None 
@@ -963,7 +996,6 @@ with tabs[4]:
 
 # ====== 追加：タブ6：ユーザー・ログ管理 ======
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
     df_users = safe_read_worksheet(conn, "ユーザー", ["ユーザーID", "パスワード", "名前", "ステータス", "権限"])
     
     with tabs[5]:
